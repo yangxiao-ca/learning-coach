@@ -1,0 +1,4228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 学习教练</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        .window-content { font-size: 14px; line-height: 1.6; }
+        .window-content h1, .window-content h2, .window-content h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .window-content h1 { font-size: 1.5em; }
+        .window-content h2 { font-size: 1.3em; }
+        .window-content h3 { font-size: 1.1em; }
+        .window-content ul, .window-content ol { margin-left: 1.5em; margin-bottom: 0.5em; }
+        .window-content p { margin-bottom: 0.5em; }
+        .window-content code { background: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+        .window-content pre { background: #1e293b; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+        .window-content pre code { background: transparent; padding: 0; }
+        .phase-step { transition: all 0.3s ease; }
+        .phase-step.completed { background: #065f46; }
+        .phase-step.current { background: #1e40af; ring: 2px solid #60a5fa; }
+        .phase-step.skipped { opacity: 0.5; }
+        .loading { animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .modal { display: none; }
+        .modal.active { display: flex; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+    <div id="app" class="container mx-auto p-4 max-w-7xl">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-indigo-400">🎓 AI 学习教练</h1>
+            <div class="flex gap-2">
+                <button onclick="showApiSettings()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">
+                    ⚙️ 设置 API
+                </button>
+            </div>
+        </header>
+
+        <!-- 主视图：项目列表 -->
+        <div id="mainView">
+            <!-- 快速操作 -->
+            <div class="mb-6">
+                <button onclick="showNewProjectModal()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold text-lg">
+                    + 新建学习项目
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- 左侧：我的学习项目 -->
+                <div class="lg:col-span-2">
+                    <h2 class="text-lg font-semibold mb-4 text-slate-300">📚 我的学习项目</h2>
+                    <div id="projectList" class="space-y-3">
+                        <!-- 项目列表动态生成 -->
+                        <div class="text-slate-500 text-center py-8">
+                            还没有学习项目，点击上方按钮创建第一个项目吧！
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：今日学习 -->
+                <div class="lg:col-span-1">
+                    <h2 class="text-lg font-semibold mb-4 text-slate-300">📖 今日学习</h2>
+                    <div id="todayLearning" class="bg-slate-800 rounded-lg p-4">
+                        <div class="text-slate-500 text-center py-8">
+                            今天还没有学习记录
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 学习视图：七步流程 -->
+        <div id="learningView" class="hidden">
+            <!-- 将在学习时动态填充 -->
+        </div>
+
+        <!-- 设置 API 模态框 -->
+        <div id="apiSettingsModal" class="modal fixed inset-0 bg-black/50 z-50 items-center justify-center">
+            <div class="bg-slate-800 rounded-xl p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">API 设置</h2>
+                    <button onclick="hideApiSettings()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                <div class="space-y-3">
+                    <!-- 国际模型 -->
+                    <div class="text-xs text-slate-500 font-bold uppercase pt-2">国际模型</div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">OpenAI API Key (GPT-4o)</label>
+                        <input id="openaiKey" type="password" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="sk-...">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Anthropic API Key (Claude)</label>
+                        <input id="anthropicKey" type="password" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="sk-ant-...">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Google API Key (Gemini)</label>
+                        <input id="googleKey" type="password" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="AIza...">
+                    </div>
+
+                    <!-- 国内模型 -->
+                    <div class="text-xs text-slate-500 font-bold uppercase pt-2">国内模型</div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">千问 API Key (阿里云 DashScope)</label>
+                        <input id="qwenKey" type="password" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="sk-...">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">Kimi API Key (月之暗面)</label>
+                        <input id="kimiKey" type="password" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="sk-...">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">MiniMax API Key</label>
+                        <input id="minimaxKey" type="password" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="...">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">MiniMax Group ID</label>
+                        <input id="minimaxGroupId" type="text" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="可选...">
+                    </div>
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">智谱 API Key (GLM)</label>
+                        <input id="zhipuKey" type="password" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="...">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">默认模型</label>
+                        <select id="defaultModel" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm">
+                            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+                            <option value="gpt-4o">GPT-4o</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                            <option value="qwen-max">千问 Qwen Max</option>
+                            <option value="kimi-moonshot-v1-128k">Kimi 128K</option>
+                            <option value="minimax-abab6.5s-chat">MiniMax ABAB6.5s</option>
+                            <option value="glm-4">智谱 GLM-4</option>
+                        </select>
+                    </div>
+
+                    <button onclick="saveApiSettings()" class="w-full py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold mt-4">
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 新建项目模态框 -->
+        <div id="newProjectModal" class="modal fixed inset-0 bg-black/50 z-50 items-center justify-center">
+            <div class="bg-slate-800 rounded-xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold">📚 新建学习项目</h2>
+                    <button onclick="hideNewProjectModal()" class="text-slate-400 hover:text-white text-2xl">&times;</button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">学习主题</label>
+                        <input id="projectTitle" type="text" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="例如：深度学习原理与实践">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">学习材料来源</label>
+                        <div class="flex gap-2 mb-2">
+                            <button onclick="setMaterialInput('paste')" id="btnPaste" class="flex-1 py-2 bg-indigo-600 rounded text-sm">粘贴文本</button>
+                            <button onclick="setMaterialInput('pdf')" id="btnPdf" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">上传 PDF</button>
+                            <button onclick="setMaterialInput('txt')" id="btnTxt" class="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">上传 TXT</button>
+                        </div>
+                    </div>
+
+                    <!-- 粘贴文本模式 -->
+                    <div id="pasteInputArea">
+                        <label class="block text-sm text-slate-400 mb-1">学习材料（粘贴文章、博客内容）</label>
+                        <textarea id="materialContent" class="w-full h-40 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm resize-none" placeholder="粘贴学习材料..."></textarea>
+                    </div>
+
+                    <!-- PDF 上传模式 -->
+                    <div id="pdfInputArea" class="hidden">
+                        <label class="block text-sm text-slate-400 mb-1">上传 PDF 文件</label>
+                        <input type="file" id="pdfFileInput" accept=".pdf" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" onchange="handlePdfUpload(this)">
+                        <div id="pdfPreview" class="mt-2 text-sm text-slate-500 hidden">
+                            <div class="bg-slate-900 rounded p-3">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-green-400">✅</span>
+                                    <span id="pdfFileName">文件名</span>
+                                </div>
+                                <div id="pdfChapters" class="text-xs space-y-1"></div>
+                                <p class="text-amber-400 mt-2">💡 将按章节生成学习步骤，节省约 95% Token</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TXT 上传模式 -->
+                    <div id="txtInputArea" class="hidden">
+                        <label class="block text-sm text-slate-400 mb-1">上传 TXT/MD 文件</label>
+                        <input type="file" id="txtFileInput" accept=".txt,.md" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" onchange="handleTxtUpload(this)">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">学习目标（可选）</label>
+                        <input id="learningGoal" type="text" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="例如：理解核心原理，能搭建简单模型">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">学习者画像（可选）</label>
+                        <input id="learnerProfile" type="text" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="例如：初学者，工科背景，希望结合代码示例">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm text-slate-400 mb-1">选择 AI 模型</label>
+                        <select id="projectModel" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm">
+                            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet（推荐）</option>
+                            <option value="gpt-4o">GPT-4o</option>
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                            <option value="qwen-max">千问 Qwen Max</option>
+                            <option value="kimi-moonshot-v1-128k">Kimi 128K</option>
+                            <option value="minimax-abab6.5s-chat">MiniMax ABAB6.5s</option>
+                            <option value="glm-4">智谱 GLM-4</option>
+                        </select>
+                    </div>
+
+                    <div class="flex gap-2 mt-4">
+                        <button onclick="saveProjectOnly()" class="flex-1 py-3 bg-slate-600 hover:bg-slate-500 rounded-lg font-bold">
+                            💾 保存项目
+                        </button>
+                        <button onclick="createProject()" id="btnCreateProject" class="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold">
+                            🚀 生成学习规划
+                        </button>
+                    </div>
+
+                    <!-- 生成进度 -->
+                    <div id="generatingProgress" class="hidden mt-4 p-4 bg-slate-900 rounded-lg">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="loading text-2xl">🤖</div>
+                            <div>
+                                <p class="font-semibold" id="progressText">正在分析学习材料...</p>
+                                <p class="text-xs text-slate-500" id="progressSubtext">这可能需要 10-30 秒</p>
+                            </div>
+                        </div>
+                        <div class="w-full bg-slate-700 rounded-full h-3">
+                            <div id="progressBar" class="bg-indigo-600 h-3 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-2 text-center" id="progressPercent">0%</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ==================== 数据库 (IndexedDB) ====================
+        const DB_NAME = 'LearningCoachDB';
+        const DB_VERSION = 1;
+        let db = null;
+
+        async function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => {
+                    db = request.result;
+                    resolve(db);
+                };
+
+                request.onupgradeneeded = (event) => {
+                    const database = event.target.result;
+
+                    // 项目表
+                    if (!database.objectStoreNames.contains('projects')) {
+                        const projectStore = database.createObjectStore('projects', { keyPath: 'id' });
+                        projectStore.createIndex('createdAt', 'createdAt', { unique: false });
+                    }
+
+                    // 学习记录表
+                    if (!database.objectStoreNames.contains('records')) {
+                        const recordStore = database.createObjectStore('records', { keyPath: 'id' });
+                        recordStore.createIndex('projectId', 'projectId', { unique: false });
+                        recordStore.createIndex('date', 'date', { unique: false });
+                    }
+                };
+            });
+        }
+
+        async function dbAdd(storeName, data) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.add(data);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function dbGet(storeName, id) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, 'readonly');
+                const store = transaction.objectStore(storeName);
+                const request = store.get(id);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function dbGetAll(storeName) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, 'readonly');
+                const store = transaction.objectStore(storeName);
+                const request = store.getAll();
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function dbUpdate(storeName, data) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.put(data);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function dbDelete(storeName, id) {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(storeName, 'readwrite');
+                const store = transaction.objectStore(storeName);
+                const request = store.delete(id);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        // ==================== 模型配置 ====================
+        const MODELS = {
+            // OpenAI
+            'gpt-4o': { name: 'GPT-4o', provider: 'openai', endpoint: 'https://api.openai.com/v1/chat/completions' },
+            'gpt-4o-mini': { name: 'GPT-4o Mini', provider: 'openai', endpoint: 'https://api.openai.com/v1/chat/completions' },
+            'o3-mini': { name: 'O3 Mini', provider: 'openai', endpoint: 'https://api.openai.com/v1/chat/completions' },
+            // Anthropic
+            'claude-3-5-sonnet': { name: 'Claude 3.5 Sonnet', provider: 'anthropic', endpoint: 'https://api.anthropic.com/v1/messages' },
+            'claude-3-haiku': { name: 'Claude 3 Haiku', provider: 'anthropic', endpoint: 'https://api.anthropic.com/v1/messages' },
+            // Google
+            'gemini-2.5-flash': { name: 'Gemini 2.5 Flash', provider: 'google', endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent' },
+            'gemini-2.5-pro': { name: 'Gemini 2.5 Pro', provider: 'google', endpoint: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent' },
+            // 千问
+            'qwen-max': { name: 'Qwen Max', provider: 'qwen', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions' },
+            'qwen-plus': { name: 'Qwen Plus', provider: 'qwen', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions' },
+            // Kimi
+            'kimi-moonshot-v1-128k': { name: 'Kimi 128K', provider: 'kimi', endpoint: 'https://api.moonshot.cn/v1/chat/completions' },
+            // MiniMax
+            'minimax-abab6.5s-chat': { name: 'MiniMax ABAB6.5s', provider: 'minimax', endpoint: 'https://api.minimax.chat/v1/text/chatcompletion_v2' },
+            // 智谱
+            'glm-4': { name: '智谱 GLM-4', provider: 'zhipu', endpoint: 'https://open.bigmodel.cn/api/paas/v4/chat/completions' },
+        };
+
+        const MODEL_NAME_MAP = {
+            'GPT-4o': 'gpt-4o',
+            'GPT-4o Mini': 'gpt-4o-mini',
+            'O3 Mini': 'o3-mini',
+            'Claude 3.5 Sonnet': 'claude-3-5-sonnet-20241022',
+            'Claude 3 Haiku': 'claude-3-5-haiku-20241022',
+            'Gemini 2.5 Flash': 'gemini-2.5-flash',
+            'Gemini 2.5 Pro': 'gemini-2.5-pro',
+            'Qwen Max': 'qwen-max',
+            'Qwen Plus': 'qwen-plus',
+            'Kimi 128K': 'moonshot-v1-128k',
+            'MiniMax ABAB6.5s': 'abab6.5s-chat',
+            '智谱 GLM-4': 'glm-4',
+        };
+
+        // ==================== AI 调用 ====================
+        async function callModel(modelId, messages, options = {}) {
+            const model = MODELS[modelId];
+            if (!model) throw new Error('未知模型: ' + modelId);
+
+            const settings = getApiSettings();
+            const apiKey = settings[`${model.provider}Key`];
+            if (!apiKey) throw new Error(`未配置 ${model.provider} API Key`);
+
+            switch (model.provider) {
+                case 'openai':
+                    return await callOpenAI(model, messages, apiKey, options);
+                case 'anthropic':
+                    return await callAnthropic(model, messages, apiKey, options);
+                case 'google':
+                    return await callGoogle(model, messages, apiKey, options);
+                case 'qwen':
+                    return await callQwen(model, messages, apiKey, options);
+                case 'kimi':
+                    return await callKimi(model, messages, apiKey, options);
+                case 'minimax':
+                    return await callMinimax(model, messages, apiKey, settings.minimaxGroupId, options);
+                case 'zhipu':
+                    return await callZhipu(model, messages, apiKey, options);
+                default:
+                    throw new Error('不支持的提供商: ' + model.provider);
+            }
+        }
+
+        async function callOpenAI(model, messages, apiKey, options) {
+            const response = await fetch(model.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: MODEL_NAME_MAP[model.name],
+                    messages: messages,
+                    max_tokens: options.maxTokens || 4096
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || 'API 请求失败');
+            }
+
+            const data = await response.json();
+            return { content: data.choices[0].message.content, usage: data.usage };
+        }
+
+        async function callAnthropic(model, messages, apiKey, options) {
+            const response = await fetch(model.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: MODEL_NAME_MAP[model.name],
+                    max_tokens: options.maxTokens || 4096,
+                    messages: messages
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || 'API 请求失败');
+            }
+
+            const data = await response.json();
+            return { content: data.content[0].text, usage: data.usage };
+        }
+
+        async function callGoogle(model, messages, apiKey, options) {
+            const userMessage = messages.find(m => m.role === 'user')?.content || '';
+            const response = await fetch(`${model.endpoint}?key=${apiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: userMessage }] }],
+                    generationConfig: { maxOutputTokens: options.maxTokens || 4096 }
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || 'API 请求失败');
+            }
+
+            const data = await response.json();
+            return { content: data.candidates[0].content.parts[0].text, usage: data.usageMetadata };
+        }
+
+        async function callQwen(model, messages, apiKey, options) {
+            const response = await fetch(model.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: MODEL_NAME_MAP[model.name],
+                    messages: messages,
+                    max_tokens: options.maxTokens || 4096
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || err.message || 'API 请求失败');
+            }
+
+            const data = await response.json();
+            return { content: data.choices[0].message.content, usage: data.usage };
+        }
+
+        async function callKimi(model, messages, apiKey, options) {
+            const response = await fetch(model.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: MODEL_NAME_MAP[model.name],
+                    messages: messages,
+                    max_tokens: options.maxTokens || 4096
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || err.message || 'API 请求失败');
+            }
+
+            const data = await response.json();
+            return { content: data.choices[0].message.content, usage: data.usage };
+        }
+
+        async function callMinimax(model, messages, apiKey, groupId, options) {
+            const requestBody = {
+                model: MODEL_NAME_MAP[model.name],
+                messages: messages,
+                tokens_to_generate: options.maxTokens || 4096
+            };
+
+            if (groupId) {
+                requestBody.group_id = groupId;
+            }
+
+            const response = await fetch(model.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify(requestBody)
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || 'API 请求失败');
+            }
+
+            const data = await response.json();
+            return { content: data.choices[0].messages[0].text, usage: data.usage };
+        }
+
+        async function callZhipu(model, messages, apiKey, options) {
+            const response = await fetch(model.endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: MODEL_NAME_MAP[model.name],
+                    messages: messages,
+                    max_tokens: options.maxTokens || 4096
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.error?.message || err.message || 'API 请求失败');
+            }
+
+            const data = await response.json();
+            return { content: data.choices[0].message.content, usage: data.usage };
+        }
+
+        // ==================== 设置管理 ====================
+        function getApiSettings() {
+            const settings = localStorage.getItem('learningCoachSettings');
+            return settings ? JSON.parse(settings) : {};
+        }
+
+        function saveApiSettings() {
+            const settings = {
+                openaiKey: document.getElementById('openaiKey').value,
+                anthropicKey: document.getElementById('anthropicKey').value,
+                googleKey: document.getElementById('googleKey').value,
+                qwenKey: document.getElementById('qwenKey').value,
+                kimiKey: document.getElementById('kimiKey').value,
+                minimaxKey: document.getElementById('minimaxKey').value,
+                minimaxGroupId: document.getElementById('minimaxGroupId').value,
+                zhipuKey: document.getElementById('zhipuKey').value,
+                defaultModel: document.getElementById('defaultModel').value
+            };
+            localStorage.setItem('learningCoachSettings', JSON.stringify(settings));
+            hideApiSettings();
+            alert('设置已保存');
+        }
+
+        function loadApiSettings() {
+            const settings = getApiSettings();
+            document.getElementById('openaiKey').value = settings.openaiKey || '';
+            document.getElementById('anthropicKey').value = settings.anthropicKey || '';
+            document.getElementById('googleKey').value = settings.googleKey || '';
+            document.getElementById('qwenKey').value = settings.qwenKey || '';
+            document.getElementById('kimiKey').value = settings.kimiKey || '';
+            document.getElementById('minimaxKey').value = settings.minimaxKey || '';
+            document.getElementById('minimaxGroupId').value = settings.minimaxGroupId || '';
+            document.getElementById('zhipuKey').value = settings.zhipuKey || '';
+            document.getElementById('defaultModel').value = settings.defaultModel || 'claude-3-5-sonnet';
+        }
+
+        function showApiSettings() {
+            loadApiSettings();
+            document.getElementById('apiSettingsModal').classList.add('active');
+        }
+
+        function hideApiSettings() {
+            document.getElementById('apiSettingsModal').classList.remove('active');
+        }
+
+        // ==================== 项目管理 ====================
+        let currentProject = null;
+        let uploadedPdfData = null;
+        let currentPhaseResult = null;
+
+        // 全局Phase确认内容存储
+        let phaseConfirmedContents = {
+            phase1: { confirmed: false, content: null, question: null },
+            phase2: { confirmed: false, content: null },
+            phase3: { confirmed: false, content: null },
+            phase4: { confirmed: false, content: null },
+            phase5: { confirmed: false, content: null },
+            phase6: { confirmed: false, content: null },
+            phase7: { confirmed: false, content: null }
+        };
+
+        // 重置Phase确认内容（新步骤开始时）
+        function resetPhaseConfirmedContents() {
+            phaseConfirmedContents = {
+                phase1: { confirmed: false, content: null, question: null },
+                phase2: { confirmed: false, content: null },
+                phase3: { confirmed: false, content: null },
+                phase4: { confirmed: false, content: null },
+                phase5: { confirmed: false, content: null },
+                phase6: { confirmed: false, content: null },
+                phase7: { confirmed: false, content: null }
+            };
+        }
+
+        // 加载已保存的确认内容
+        async function loadPhaseConfirmedContents() {
+            const p = currentProject;
+            if (!p) return;
+
+            const step = p.plan.steps[p.currentStep - 1];
+            if (step && step.phaseConfirmedContents) {
+                phaseConfirmedContents = step.phaseConfirmedContents;
+            }
+        }
+
+        // 保存确认内容
+        async function savePhaseConfirmedContents() {
+            const p = currentProject;
+            if (!p) return;
+
+            const step = p.plan.steps[p.currentStep - 1];
+            if (step) {
+                step.phaseConfirmedContents = phaseConfirmedContents;
+                await dbUpdate('projects', p);
+            }
+        }
+
+        function showNewProjectModal() {
+            // 加载用户的默认模型设置
+            const settings = getApiSettings();
+            const defaultModel = settings.defaultModel || 'claude-3-5-sonnet';
+            document.getElementById('projectModel').value = defaultModel;
+
+            document.getElementById('newProjectModal').classList.add('active');
+        }
+
+        function hideNewProjectModal() {
+            document.getElementById('newProjectModal').classList.remove('active');
+            // 重置表单
+            document.getElementById('projectTitle').value = '';
+            document.getElementById('materialContent').value = '';
+            document.getElementById('learningGoal').value = '';
+            document.getElementById('learnerProfile').value = '';
+            setMaterialInput('paste');
+            uploadedPdfData = null;
+        }
+
+        function setMaterialInput(type) {
+            // 重置按钮样式
+            document.querySelectorAll('#btnPaste, #btnPdf, #btnTxt').forEach(btn => {
+                btn.classList.remove('bg-indigo-600');
+                btn.classList.add('bg-slate-700');
+            });
+
+            // 隐藏所有输入区
+            document.getElementById('pasteInputArea').classList.add('hidden');
+            document.getElementById('pdfInputArea').classList.add('hidden');
+            document.getElementById('txtInputArea').classList.add('hidden');
+
+            // 显示选中区域
+            if (type === 'paste') {
+                document.getElementById('pasteInputArea').classList.remove('hidden');
+                document.getElementById('btnPaste').classList.remove('bg-slate-700');
+                document.getElementById('btnPaste').classList.add('bg-indigo-600');
+            } else if (type === 'pdf') {
+                document.getElementById('pdfInputArea').classList.remove('hidden');
+                document.getElementById('btnPdf').classList.remove('bg-slate-700');
+                document.getElementById('btnPdf').classList.add('bg-indigo-600');
+            } else if (type === 'txt') {
+                document.getElementById('txtInputArea').classList.remove('hidden');
+                document.getElementById('btnTxt').classList.remove('bg-slate-700');
+                document.getElementById('btnTxt').classList.add('bg-indigo-600');
+            }
+        }
+
+        // PDF.js 配置
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        async function handlePdfUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const fileName = file.name;
+            document.getElementById('pdfFileName').textContent = fileName;
+
+            try {
+                const arrayBuffer = await file.arrayBuffer();
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+                let fullText = '';
+                let chapterCount = 0;
+                const chapters = [];
+
+                // 简单的章节检测：查找"第X章"模式
+                const chapterPattern = /第[一二三四五六七八九十百千0-9]+章/g;
+
+                for (let i = 1; i <= pdf.numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const textContent = await page.getTextContent();
+                    const pageText = textContent.items.map(item => item.str).join(' ');
+                    fullText += pageText + '\n\n';
+
+                    // 检测章节
+                    const matches = pageText.match(chapterPattern);
+                    if (matches) {
+                        chapterCount++;
+                        chapters.push({
+                            page: i,
+                            title: matches[0],
+                            preview: pageText.substring(0, 100)
+                        });
+                    }
+                }
+
+                // 存储解析结果
+                uploadedPdfData = {
+                    type: 'pdf',
+                    title: fileName,
+                    fileName: fileName,
+                    fullText: fullText,
+                    preview: fullText.substring(0, 3000), // 前3000字用于生成大纲
+                    chapters: chapters,
+                    totalPages: pdf.numPages
+                };
+
+                // 显示预览
+                const chaptersDiv = document.getElementById('pdfChapters');
+                chaptersDiv.innerHTML = `
+                    <p class="text-green-400">✅ 已解析: ${pdf.numPages} 页，约 ${Math.ceil(fullText.length / 1000)} 千字</p>
+                    <p class="text-slate-400 mt-2">检测到 ${chapters.length} 个章节：</p>
+                    <div class="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                        ${chapters.slice(0, 10).map(c => `
+                            <div class="flex items-center gap-2 text-xs">
+                                <span class="text-indigo-400">•</span>
+                                <span>${c.title}</span>
+                                <span class="text-slate-500">(${c.preview.substring(0, 30)}...)</span>
+                            </div>
+                        `).join('')}
+                        ${chapters.length > 10 ? `<p class="text-slate-500">... 还有 ${chapters.length - 10} 个章节</p>` : ''}
+                    </div>
+                `;
+
+                document.getElementById('pdfPreview').classList.remove('hidden');
+
+            } catch (error) {
+                alert('PDF 解析失败: ' + error.message);
+                console.error(error);
+            }
+        }
+
+        async function handleTxtUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('materialContent').value = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+
+        // 进度模拟器
+        let progressInterval = null;
+        let currentProgress = 0;
+        const progressSteps = [
+            { percent: 10, text: '正在分析学习材料...', subtext: '提取关键信息' },
+            { percent: 30, text: '正在识别知识结构...', subtext: '分析章节和主题' },
+            { percent: 50, text: '正在设计学习路径...', subtext: '规划学习步骤' },
+            { percent: 70, text: '正在估算学习时长...', subtext: '计算每步时间' },
+            { percent: 85, text: '正在优化学习方案...', subtext: '调整难度和节奏' },
+            { percent: 95, text: '正在生成最终规划...', subtext: '即将完成' }
+        ];
+        let progressStepIndex = 0;
+
+        function startProgress() {
+            const progressDiv = document.getElementById('generatingProgress');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressSubtext = document.getElementById('progressSubtext');
+            const progressPercent = document.getElementById('progressPercent');
+
+            progressDiv.classList.remove('hidden');
+            currentProgress = 0;
+            progressStepIndex = 0;
+
+            // 立即显示第一步
+            updateProgressDisplay();
+
+            progressInterval = setInterval(() => {
+                if (progressStepIndex < progressSteps.length) {
+                    const step = progressSteps[progressStepIndex];
+                    currentProgress = step.percent;
+                    updateProgressDisplay();
+                    progressStepIndex++;
+                }
+            }, 2000); // 每2秒更新一次
+        }
+
+        function updateProgressDisplay() {
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const progressSubtext = document.getElementById('progressSubtext');
+            const progressPercent = document.getElementById('progressPercent');
+
+            if (progressStepIndex < progressSteps.length) {
+                const step = progressSteps[progressStepIndex];
+                progressText.textContent = step.text;
+                progressSubtext.textContent = step.subtext;
+            }
+            progressBar.style.width = currentProgress + '%';
+            progressPercent.textContent = currentProgress + '%';
+        }
+
+        function stopProgress(complete = true) {
+            if (progressInterval) {
+                clearInterval(progressInterval);
+                progressInterval = null;
+            }
+
+            if (complete) {
+                // 设置为100%
+                currentProgress = 100;
+                updateProgressDisplay();
+                document.getElementById('progressText').textContent = '✅ 学习规划生成完成！';
+                document.getElementById('progressSubtext').textContent = '即将跳转到学习页面...';
+
+                // 1秒后隐藏
+                setTimeout(() => {
+                    document.getElementById('generatingProgress').classList.add('hidden');
+                }, 1000);
+            } else {
+                // 失败，隐藏进度条
+                document.getElementById('generatingProgress').classList.add('hidden');
+            }
+        }
+
+        async function createProject() {
+            const title = document.getElementById('projectTitle').value.trim();
+            const model = document.getElementById('projectModel').value;
+            const goal = document.getElementById('learningGoal').value.trim();
+            const profile = document.getElementById('learnerProfile').value.trim();
+
+            if (!title) {
+                alert('请输入学习主题');
+                return;
+            }
+
+            // 获取材料内容
+            let material;
+            if (!uploadedPdfData) {
+                const content = document.getElementById('materialContent').value.trim();
+                if (!content) {
+                    alert('请输入学习材料');
+                    return;
+                }
+                material = {
+                    type: 'paste',
+                    content: content,
+                    preview: content.substring(0, 3000)
+                };
+            } else {
+                material = uploadedPdfData;
+            }
+
+            // 禁用按钮
+            const btn = document.getElementById('btnCreateProject');
+            const saveBtn = btn.previousElementSibling;
+            btn.disabled = true;
+            saveBtn.disabled = true;
+
+            // 开始进度显示
+            startProgress();
+
+            try {
+                // 调用 AI 生成学习规划
+                const plan = await generateLearningPlan(material, goal, profile, model);
+
+                // 停止进度（完成）
+                stopProgress(true);
+
+                // 创建项目
+                const project = {
+                    id: generateUUID(),
+                    title: title,
+                    material: material,
+                    model: model,
+                    goal: goal,
+                    learnerProfile: profile,
+                    plan: plan,
+                    planGenerated: true,
+                    currentStep: 1,
+                    currentPhase: 1,
+                    progress: 0,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+
+                // 保存到数据库
+                await dbAdd('projects', project);
+
+                hideNewProjectModal();
+                currentProject = project;
+                renderLearningView();
+
+            } catch (error) {
+                stopProgress(false);
+                alert('创建项目失败: ' + error.message);
+                console.error(error);
+            } finally {
+                btn.disabled = false;
+                saveBtn.disabled = false;
+            }
+        }
+
+        async function saveProjectOnly() {
+            const title = document.getElementById('projectTitle').value.trim();
+            const model = document.getElementById('projectModel').value;
+            const goal = document.getElementById('learningGoal').value.trim();
+            const profile = document.getElementById('learnerProfile').value.trim();
+
+            if (!title) {
+                alert('请输入学习主题');
+                return;
+            }
+
+            // 获取材料内容
+            let material;
+            if (!uploadedPdfData) {
+                const content = document.getElementById('materialContent').value.trim();
+                if (!content) {
+                    alert('请输入学习材料');
+                    return;
+                }
+                material = {
+                    type: 'paste',
+                    content: content,
+                    preview: content.substring(0, 3000)
+                };
+            } else {
+                material = uploadedPdfData;
+            }
+
+            // 创建项目（不生成学习规划）
+            const project = {
+                id: generateUUID(),
+                title: title,
+                material: material,
+                model: model,
+                goal: goal,
+                learnerProfile: profile,
+                planGenerated: false,
+                plan: null,
+                currentStep: 0,
+                currentPhase: 0,
+                progress: 0,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            // 保存到数据库
+            await dbAdd('projects', project);
+
+            hideNewProjectModal();
+            renderProjectList();
+        }
+
+        async function generateLearningPlan(material, goal, profile, model) {
+            const content = material.preview || material.content;
+
+            const prompt = `你是一位专业的教学设计专家。请分析以下学习材料，制定详细的学习规划。
+
+${material.type === 'pdf' ? '材料目录/预览（用于生成学习步骤）：' : '学习材料：'}
+${content}
+
+${goal ? `学习目标：${goal}` : '学习目标：请帮我制定合理的学习目标'}
+${profile ? `学习者画像：${profile}` : ''}
+
+请输出 JSON 格式（注意：必须输出纯 JSON，不要有 markdown 格式）：
+{
+  "outline": "整体大纲概述（2-3句话）",
+  "steps": [
+    {
+      "id": 1,
+      "chapterId": "c1",
+      "title": "步骤标题",
+      "chunkId": "c1",
+      "estimatedMinutes": 45,
+      "keyPoints": ["要点1", "要点2"]
+    }
+  ],
+  "estimatedHours": 预估总小时数
+}
+
+注意：
+- 将学习内容拆分成 5-15 个循序渐进的步骤
+- 每个步骤应该是可以在 30-60 分钟内学完的
+- 确保 JSON 格式正确，不要有其他文字
+`;
+
+            const response = await callModel(model, [{ role: 'user', content: prompt }], { maxTokens: 4096 });
+
+            try {
+                const plan = parseAIResponse(response.content);
+
+                // 为每个步骤初始化 7 个阶段
+                const phaseNames = ['启动', '框架', '学习', '费曼', '考试', '应用', '总结'];
+                const phaseIcons = ['🚀', '🗺️', '📖', '🗣️', '📝', '🛠️', '📋'];
+
+                plan.steps = plan.steps.map((step, idx) => ({
+                    ...step,
+                    phases: phaseNames.map((name, phaseIdx) => ({
+                        id: phaseIdx + 1,
+                        name: name,
+                        icon: phaseIcons[phaseIdx],
+                        completed: false,
+                        skipped: false,
+                        result: null
+                    })),
+                    completed: false,
+                    completedAt: null
+                }));
+
+                return plan;
+            } catch (e) {
+                console.error('JSON 解析失败:', jsonStr);
+                throw new Error('AI 返回格式不正确，请重试');
+            }
+        }
+
+        function generateUUID() {
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                const r = Math.random() * 16 | 0;
+                return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+        }
+
+        // ==================== 视图渲染 ====================
+        async function renderProjectList() {
+            const projects = await dbGetAll('projects');
+            const listEl = document.getElementById('projectList');
+
+            if (projects.length === 0) {
+                listEl.innerHTML = '<div class="text-slate-500 text-center py-8">还没有学习项目，点击上方按钮创建第一个项目吧！</div>';
+                return;
+            }
+
+            listEl.innerHTML = projects.map(p => {
+                // 计算上次学习时间
+                const lastDate = new Date(p.updatedAt);
+                const timeAgo = getTimeAgo(lastDate);
+
+                // 检查是否已生成学习规划
+                if (!p.planGenerated || !p.plan) {
+                    // 未生成规划的项目
+                    return `
+                        <div class="bg-slate-800 rounded-lg p-4 hover:bg-slate-750">
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="font-semibold text-lg flex-1">📚 ${p.title}</h3>
+                                <span class="text-xs text-amber-400">待生成规划</span>
+                            </div>
+                            <div class="mb-2 text-sm text-slate-400">
+                                <p>学习材料: ${p.material.type === 'pdf' ? 'PDF' : p.material.type === 'paste' ? '文本' : '文件'}</p>
+                                <p>模型: ${MODELS[p.model]?.name || p.model}</p>
+                            </div>
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500">${timeAgo}</span>
+                                <div class="flex gap-2">
+                                    <button onclick="event.stopPropagation(); deleteProject('${p.id}')" class="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs">🗑️ 删除</button>
+                                    <button onclick="event.stopPropagation(); generatePlanForProject('${p.id}')" class="px-3 py-1 bg-amber-600 hover:bg-amber-700 rounded text-xs">🚀 生成学习规划</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // 已生成规划的项目
+                const completedSteps = p.plan.steps.filter(s => s.phases && s.phases.every(ph => ph.completed || ph.skipped)).length;
+                const totalSteps = p.plan.steps.length;
+                const progress = Math.round((completedSteps / totalSteps) * 100);
+
+                return `
+                    <div class="bg-slate-800 rounded-lg p-4 hover:bg-slate-750 cursor-pointer" onclick="openProject('${p.id}')">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-semibold text-lg flex-1">📚 ${p.title}</h3>
+                            <span class="text-xs text-slate-500">${timeAgo}</span>
+                        </div>
+                        <div class="mb-2">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span>进度</span>
+                                <span>${completedSteps}/${totalSteps} 步</span>
+                            </div>
+                            <div class="w-full bg-slate-700 rounded-full h-2">
+                                <div class="bg-indigo-600 h-2 rounded-full" style="width: ${progress}%"></div>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-slate-400">当前: 第${p.currentStep}步 - ${p.plan.steps[p.currentStep - 1]?.title || '开始'}</span>
+                            <div class="flex gap-2">
+                                <button onclick="event.stopPropagation(); deleteProject('${p.id}')" class="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs">🗑️ 删除</button>
+                                <button onclick="event.stopPropagation(); continueProject('${p.id}')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-xs">继续学习</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function getTimeAgo(date) {
+            const seconds = Math.floor((new Date() - date) / 1000);
+            if (seconds < 60) return '刚刚';
+            if (seconds < 3600) return Math.floor(seconds / 60) + '分钟前';
+            if (seconds < 86400) return Math.floor(seconds / 3600) + '小时前';
+            if (seconds < 604800) return Math.floor(seconds / 86400) + '天前';
+            return date.toLocaleDateString('zh-CN');
+        }
+
+        async function generatePlanForProject(projectId) {
+            const project = await dbGet('projects', projectId);
+            if (!project) return;
+
+            if (!confirm(`为项目"${project.title}"生成学习规划？\n\n这将调用 AI API 生成学习步骤。`)) {
+                return;
+            }
+
+            // 显示加载状态
+            const listEl = document.getElementById('projectList');
+            const loadingHtml = `
+                <div class="bg-slate-800 rounded-lg p-6 text-center">
+                    <div class="loading text-4xl mb-4">🤖</div>
+                    <p class="font-semibold mb-2">正在生成学习规划...</p>
+                    <p class="text-sm text-slate-500">这可能需要 10-30 秒</p>
+                </div>
+            `;
+            const originalContent = listEl.innerHTML;
+            listEl.innerHTML = loadingHtml;
+
+            try {
+                // 调用 AI 生成学习规划
+                const plan = await generateLearningPlan(project.material, project.goal, project.learnerProfile, project.model);
+
+                // 更新项目
+                project.plan = plan;
+                project.planGenerated = true;
+                project.currentStep = 1;
+                project.currentPhase = 1;
+                project.updatedAt = new Date().toISOString();
+
+                await dbUpdate('projects', project);
+
+                renderProjectList();
+
+                // 提示用户规划已生成
+                const projectCard = listEl.querySelector(`[onclick*="'${projectId}'"]`);
+                if (projectCard) {
+                    projectCard.classList.add('ring-2', 'ring-green-500');
+                    setTimeout(() => projectCard.classList.remove('ring-2', 'ring-green-500'), 2000);
+                }
+
+            } catch (error) {
+                alert('生成学习规划失败: ' + error.message);
+                listEl.innerHTML = originalContent;
+                console.error(error);
+            }
+        }
+
+        async function openProject(projectId) {
+            const project = await dbGet('projects', projectId);
+            if (project) {
+                // 检查是否已生成学习规划
+                if (!project.planGenerated || !project.plan) {
+                    alert('请先生成学习规划后再开始学习');
+                    return;
+                }
+                currentProject = project;
+                renderLearningView();
+            }
+        }
+
+        async function continueProject(projectId) {
+            const project = await dbGet('projects', projectId);
+            if (!project) return;
+
+            // 检查是否已生成学习规划
+            if (!project.planGenerated || !project.plan) {
+                if (confirm(`项目"${project.title}"还没有生成学习规划。\n\n现在生成吗？`)) {
+                    await generatePlanForProject(projectId);
+                }
+                return;
+            }
+
+            await openProject(projectId);
+            // 跳转到当前未完成的阶段
+            // TODO: 实现继续学习逻辑
+        }
+
+        async function deleteProject(projectId) {
+            const project = await dbGet('projects', projectId);
+            if (!project) return;
+
+            if (!confirm(`确定要删除项目"${project.title}"吗？\n\n此操作不可恢复，所有学习进度和记录都将被删除。`)) {
+                return;
+            }
+
+            try {
+                // 删除项目
+                await dbDelete('projects', projectId);
+
+                // 删除相关的学习记录
+                const records = await dbGetAll('records');
+                const projectRecords = records.filter(r => r.projectId === projectId);
+                for (const record of projectRecords) {
+                    await dbDelete('records', record.id);
+                }
+
+                // 删除PDF文件（如果是上传的PDF）
+                if (project.material.pdfFileId) {
+                    // TODO: 如果有存储PDF文件，可以在这里删除
+                }
+
+                // 刷新项目列表
+                await renderProjectList();
+
+                // 显示成功消息
+                alert('项目已删除');
+            } catch (error) {
+                console.error('删除项目失败:', error);
+                alert('删除项目失败: ' + error.message);
+            }
+        }
+
+        function renderLearningView() {
+            document.getElementById('mainView').classList.add('hidden');
+            document.getElementById('learningView').classList.remove('hidden');
+
+            const p = currentProject;
+            const currentStep = p.plan.steps[p.currentStep - 1];
+            const totalSteps = p.plan.steps.length;
+
+            document.getElementById('learningView').innerHTML = `
+                <div class="mb-4">
+                    <button onclick="backToMain()" class="text-slate-400 hover:text-white text-sm mb-4">
+                        ← 返回项目列表
+                    </button>
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h1 class="text-2xl font-bold">${p.title}</h1>
+                            <p class="text-slate-400">第${p.currentStep}步 / 共${totalSteps}步</p>
+                        </div>
+                        <span class="text-sm text-slate-400">模型: ${MODELS[p.model]?.name || p.model}</span>
+                    </div>
+                    <div class="mt-2">
+                        <div class="w-full bg-slate-700 rounded-full h-3">
+                            <div class="bg-indigo-600 h-3 rounded-full transition-all" style="width: ${(p.currentStep / totalSteps) * 100}%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    <!-- 左侧：七步流程 -->
+                    <div class="lg:col-span-3">
+                        <div class="bg-slate-800 rounded-lg p-6">
+                            <h2 class="text-xl font-bold mb-4">${currentStep.title}</h2>
+
+                            <!-- 七步进度条 -->
+                            <div class="flex gap-1 mb-6">
+                                ${[1, 2, 3, 4, 5, 6, 7].map(i => {
+                                    const phase = currentStep.phases?.[i - 1];
+                                    const isCompleted = phase?.completed;
+                                    const isCurrent = phase?.id === p.currentPhase;
+                                    const isSkipped = phase?.skipped;
+
+                                    let classes = 'phase-step flex-1 py-2 px-1 text-center text-xs rounded cursor-pointer ';
+                                    if (isCompleted) classes += 'completed ';
+                                    else if (isCurrent) classes += 'current ';
+                                    else if (isSkipped) classes += 'skipped ';
+                                    else classes += 'bg-slate-700 hover:bg-slate-600 ';
+
+                                    return `
+                                        <div class="${classes}" onclick="selectPhase(${i})">
+                                            <div class="font-bold">${i}</div>
+                                            <div class="text-[10px] opacity-70">${['启动', '框架', '学习', '费曼', '考试', '应用', '总结'][i - 1]}</div>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+
+                            <!-- 当前阶段内容 -->
+                            <div id="phaseContent" class="min-h-[300px]">
+                                <p class="text-slate-500 text-center py-8">选择一个阶段开始学习</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧：学习记录 -->
+                    <div class="lg:col-span-1">
+                        <div class="bg-slate-800 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3">📋 本章笔记</h3>
+                            <div id="chapterNote" class="text-sm text-slate-400">
+                                <p class="text-slate-600 text-center py-4">完成学习后自动生成笔记</p>
+                            </div>
+                            <button onclick="exportNote()" class="w-full mt-3 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">
+                                📥 导出笔记
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // 显示当前阶段内容
+            if (p.currentPhase) {
+                selectPhase(p.currentPhase);
+            }
+
+            // 更新侧边栏笔记预览
+            updateChapterNote();
+        }
+
+        async function selectPhase(phaseNum) {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const phase = step.phases[phaseNum - 1];
+
+            if (!phase) return;
+
+            // 更新当前阶段
+            p.currentPhase = phaseNum;
+            await dbUpdate('projects', p);
+
+            // 从数据库重新获取最新的项目数据，确保读取到已保存的确认内容
+            const refreshedProject = await dbGet('projects', p.id);
+            if (refreshedProject) {
+                currentProject = refreshedProject;
+                const refreshedStep = currentProject.plan.steps[currentProject.currentStep - 1];
+
+                // 加载已保存的确认内容
+                if (refreshedStep && refreshedStep.phaseConfirmedContents) {
+                    phaseConfirmedContents = refreshedStep.phaseConfirmedContents;
+                }
+            }
+
+            // 渲染阶段内容
+            const contentEl = document.getElementById('phaseContent');
+
+            if (phase.completed) {
+                // 已完成，显示结果
+                contentEl.innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="text-6xl mb-4">✅</div>
+                        <p class="text-xl font-semibold mb-2">已完成</p>
+                        <div class="text-slate-400 text-sm mb-4">${phase.result?.summary || '已完成此阶段'}</div>
+                        <div class="flex gap-2">
+                            ${phaseNum > 1 ? `<button onclick="selectPhase(${phaseNum - 1})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">← 上一步</button>` : ''}
+                            ${phaseNum < 7 ? `<button onclick="nextPhase()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg">下一步 →</button>` : ''}
+                        </div>
+                    </div>
+                `;
+            } else if (phase.skipped) {
+                // 已跳过
+                contentEl.innerHTML = `
+                    <div class="text-center py-8">
+                        <div class="text-6xl mb-4">⏭️</div>
+                        <p class="text-xl text-slate-400 mb-2">已跳过此阶段</p>
+                        <div class="flex gap-2">
+                            ${phaseNum > 1 ? `<button onclick="selectPhase(${phaseNum - 1})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">← 上一步</button>` : ''}
+                            <button onclick="resetPhase(${phaseNum})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">重新学习</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // 未完成，检查是否有已确认的内容
+                const phaseKey = `phase${phaseNum}`;
+                const hasConfirmed = phaseConfirmedContents[phaseKey]?.confirmed;
+                const confirmedContent = phaseConfirmedContents[phaseKey]?.content;
+
+                // 如果有已确认的内容，显示确认后的界面
+                if (hasConfirmed && confirmedContent) {
+                    contentEl.innerHTML = getConfirmedPhaseContent(phaseNum, confirmedContent);
+                } else {
+                    // 未完成，显示阶段内容
+                    contentEl.innerHTML = `
+                        <div class="space-y-4">
+                            <div class="flex items-center gap-3">
+                                <span class="text-2xl">${['🚀', '🗺️', '📖', '🗣️', '📝', '🛠️', '📋'][phaseNum - 1]}</span>
+                                <h3 class="text-lg font-semibold">${phase.name}</h3>
+                            </div>
+
+                            <div id="phaseActionArea">
+                                ${getPhaseActionContent(phaseNum, step)}
+                            </div>
+
+                            <div class="flex gap-2 pt-4 border-t border-slate-700">
+                                ${phaseNum > 1 ? `<button onclick="selectPhase(${phaseNum - 1})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">← 上一步</button>` : ''}
+                                ${phaseNum < 7 ? `<button onclick="skipPhase(${phaseNum})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">跳过此步</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        // 获取已确认Phase的显示内容
+        function getConfirmedPhaseContent(phaseNum, content) {
+            const phaseKey = `phase${phaseNum}`;
+            const phaseNames = ['启动', '框架', '学习', '费曼', '考试', '应用', '总结'];
+            const phaseEmojis = ['🚀', '🗺️', '📖', '🗣️', '📝', '🛠️', '📋'];
+
+            return `
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">${phaseEmojis[phaseNum - 1]}</span>
+                            <h3 class="text-lg font-semibold">${phaseNames[phaseNum - 1]}</h3>
+                            <span class="text-green-400 text-sm">✓ 已确认</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900 rounded-lg p-4 max-h-[400px] overflow-y-auto window-content">
+                        ${content}
+                    </div>
+
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-3">
+                        <p class="text-green-400 text-sm text-center">✓ 内容已确认，可以继续或修改</p>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-2">
+                        ${phaseNum < 7 ? `
+                        <button onclick="completePhaseSimple(${phaseNum})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm">下一步 →</button>
+                        ` : `
+                        <button onclick="completePhaseSimple(${phaseNum})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm">完成本章 →</button>
+                        `}
+                        <button onclick="resetPhaseConfirmation(${phaseNum})" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 修改内容</button>
+                        ${phaseNum > 1 ? `<button onclick="selectPhase(${phaseNum - 1})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        // 重置Phase确认状态
+        async function resetPhaseConfirmation(phaseNum) {
+            const phaseKey = `phase${phaseNum}`;
+            phaseConfirmedContents[phaseKey] = {
+                confirmed: false,
+                content: null,
+                question: null
+            };
+            await savePhaseConfirmedContents();
+            selectPhase(phaseNum);
+        }
+
+        function getPhaseActionContent(phaseNum, step) {
+            switch (phaseNum) {
+                case 1: // 启动
+                    return `
+                        <p class="text-slate-400 mb-4">在学习之前，先激活你的已有知识...</p>
+                        <button onclick="startPhase1()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg">开始预评估</button>
+                    `;
+                case 2: // 框架
+                    return `
+                        <p class="text-slate-400 mb-4">建立知识网络，理解内容在整体中的位置...</p>
+                        <button onclick="startPhase2()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg">生成知识框架</button>
+                    `;
+                case 3: // 学习
+                    return `
+                        <p class="text-slate-400 mb-4">AI 将为你讲解本章节的核心内容...</p>
+                        <button onclick="startPhase3()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg">开始学习</button>
+                    `;
+                case 4: // 费曼
+                    return `
+                        <p class="text-slate-400 mb-4">用自己的话解释，检验是否真正理解...</p>
+                        <button onclick="startPhase4()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg">开始费曼检验</button>
+                    `;
+                case 5: // 考试
+                    return `
+                        <p class="text-slate-400 mb-4">通过练习题巩固所学知识...</p>
+                        <button onclick="startPhase5()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg">开始测试</button>
+                    `;
+                case 6: // 应用
+                    return `
+                        <p class="text-slate-400 mb-4">将知识转化为实际行动...</p>
+                        <button onclick="startPhase6()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg">获取应用建议</button>
+                    `;
+                case 7: // 总结
+                    return `
+                        <p class="text-slate-400 mb-4">回顾整个学习过程，生成你的专属笔记...</p>
+                        <button onclick="startPhase7()" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg">生成笔记</button>
+                    `;
+            }
+        }
+
+        // ==================== 辅助函数 ====================
+        function parseAIResponse(content) {
+            // 清理各种可能的markdown格式
+            let cleaned = content.trim();
+
+            // 移除 markdown 代码块标记 (包括 ```json 和 ```)
+            cleaned = cleaned.replace(/```json\s*/gi, '');
+            cleaned = cleaned.replace(/```\s*/gi, '');
+
+            // 移除可能的额外空白
+            cleaned = cleaned.trim();
+
+            // 尝试直接解析
+            try {
+                return JSON.parse(cleaned);
+            } catch (e) {
+                // 如果直接解析失败，尝试提取JSON对象
+                let firstBrace = cleaned.indexOf('{');
+                let lastBrace = cleaned.lastIndexOf('}');
+
+                // 如果有大括号，尝试提取
+                if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                    let jsonStr = cleaned.substring(firstBrace, lastBrace + 1);
+
+                    // 尝试修复未闭合的字符串（常见问题：响应被截断）
+                    const openBraces = (jsonStr.match(/\{/g) || []).length;
+                    const closeBraces = (jsonStr.match(/\}/g) || []).length;
+                    const openBrackets = (jsonStr.match(/\[/g) || []).length;
+                    const closeBrackets = (jsonStr.match(/\]/g) || []).length;
+
+                    // 如果括号不匹配，尝试闭合
+                    while (openBraces > closeBraces) {
+                        jsonStr += '}';
+                        closeBraces++;
+                    }
+                    while (openBrackets > closeBrackets) {
+                        jsonStr += ']';
+                        closeBrackets++;
+                    }
+
+                    // 如果字符串未闭合，尝试闭合
+                    const lastQuoteIndex = jsonStr.lastIndexOf('"');
+                    if (lastQuoteIndex > 0) {
+                        const afterLastQuote = jsonStr.substring(lastQuoteIndex + 1);
+                        // 检查是否有未转义的引号
+                        let quoteCount = 0;
+                        for (let i = 0; i < jsonStr.length; i++) {
+                            if (jsonStr[i] === '"' && (i === 0 || jsonStr[i-1] !== '\\')) {
+                                quoteCount++;
+                            }
+                        }
+                        if (quoteCount % 2 !== 0) {
+                            jsonStr += '"';
+                        }
+                    }
+
+                    try {
+                        const parsed = JSON.parse(jsonStr);
+                        console.warn('JSON已自动修复');
+                        return parsed;
+                    } catch (e2) {
+                        // 还失败，显示详细错误
+                        const errorPos = e2.message.match(/position (\d+)/);
+                        const pos = errorPos ? parseInt(errorPos[1]) : -1;
+                        const preview = jsonStr.substring(Math.max(0, pos - 50), pos + 50);
+                        console.error('JSON解析失败，位置:', pos, '预览:', preview);
+                        throw new Error('AI 响应格式错误，可能是网络中断导致数据不完整。请重试。');
+                    }
+                }
+
+                // 完全没有JSON结构
+                console.error('AI响应中未找到JSON结构，内容前200字符:', cleaned.substring(0, 200));
+                throw new Error('AI 响应格式错误，未找到有效的 JSON 数据');
+            }
+        }
+
+        // ==================== 七步学习流程实现 ====================
+        async function startPhase1() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">🤔 AI 正在准备问题...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const profile = p.learnerProfile || '学习者';
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `学生即将学习"${step.title}"。
+
+学生画像：${profile}
+
+请先让学生"猜一猜"这个主题的核心内容，激活已有知识。
+
+请输出一个引导性问题，让学生猜想。不要直接给出答案，而是激发好奇心。
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{"question": "引导性问题"}`
+                }]);
+
+                const questionData = parseAIResponse(response.content);
+                phaseConfirmedContents.phase1.question = questionData.question;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">🤔 思考一下：</p>
+                            <p class="text-lg">${questionData.question}</p>
+                        </div>
+                        <textarea id="phase1Answer" class="w-full h-32 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="写下你的猜想..."></textarea>
+
+                        <div class="bg-slate-800 rounded-lg p-3">
+                            <p class="text-slate-400 text-sm mb-2">选择操作：</p>
+                            <div class="flex gap-2">
+                                <button onclick="regeneratePhase1Question()" class="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 重新生成问题</button>
+                                <button onclick="submitPhase1()" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm">→ 提交答案</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function regeneratePhase1Question() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">🔄 AI 正在重新生成问题...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const profile = p.learnerProfile || '学习者';
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `请用不同的方式，为学生即将学习"${step.title}"生成一个新的引导性问题。
+
+学生画像：${profile}
+
+要求：与之前的问题不同，激发学生从另一个角度思考。
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{"question": "引导性问题"}`
+                }]);
+
+                const questionData = parseAIResponse(response.content);
+                phaseConfirmedContents.phase1.question = questionData.question;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">🤔 思考一下（新问题）：</p>
+                            <p class="text-lg">${questionData.question}</p>
+                        </div>
+                        <textarea id="phase1Answer" class="w-full h-32 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="写下你的猜想..."></textarea>
+
+                        <div class="bg-slate-800 rounded-lg p-3">
+                            <p class="text-slate-400 text-sm mb-2">选择操作：</p>
+                            <div class="flex gap-2">
+                                <button onclick="regeneratePhase1Question()" class="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 再生成一次</button>
+                                <button onclick="submitPhase1()" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm">→ 提交答案</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function submitPhase1() {
+            const answer = document.getElementById('phase1Answer').value.trim();
+            if (!answer) {
+                alert('请写下你的猜想');
+                return;
+            }
+
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">📊 AI 正在评估你的基础...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `学生的猜想：${answer}
+
+请评估学生的理解基础：
+1. 哪些概念已经理解（正确）
+2. 哪些理解有偏差（需要纠正）
+3. 学习难度建议：从什么层次开始讲解
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "strengths": ["已理解的概念"],
+  "weaknesses": ["需要纠正的误解"],
+  "difficulty": "入门/中等/进阶",
+  "focusAreas": ["重点关注领域"]
+}`
+                }]);
+
+                const result = parseAIResponse(response.content);
+
+                // 保存结果到临时存储
+                currentPhaseResult = result;
+                await dbUpdate('projects', p);
+
+                // 显示评估结果
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">✅ 你已经理解：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.strengths.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ${result.weaknesses?.length ? `
+                        <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">⚠️ 需要关注：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.weaknesses.map(w => `<li>${w}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+                        <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-1">📊 学习难度：${result.difficulty}</p>
+                            <p class="text-sm text-slate-400">将重点关注：${result.focusAreas?.join('、') || '核心概念'}</p>
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="selectPhase(2)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="regeneratePhase1Assessment()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 重新生成评估</button>
+                            <button onclick="confirmPhase1Content()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认评估结果</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function regeneratePhase1Assessment() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">🔄 AI 正在重新评估...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `请用不同的方式重新评估学生即将学习"${step.title}"的基础。
+
+要求：提供不同的角度和洞察。
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "strengths": ["已理解的概念"],
+  "weaknesses": ["需要纠正的误解"],
+  "difficulty": "入门/中等/进阶",
+  "focusAreas": ["重点关注领域"]
+}`
+                }]);
+
+                const result = parseAIResponse(response.content);
+                currentPhaseResult = result;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">✅ 你已经理解：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.strengths.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ${result.weaknesses?.length ? `
+                        <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">⚠️ 需要关注：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.weaknesses.map(w => `<li>${w}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+                        <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-1">📊 学习难度：${result.difficulty}</p>
+                            <p class="text-sm text-slate-400">将重点关注：${result.focusAreas?.join('、') || '核心概念'}</p>
+                        </div>
+
+                        <div class="bg-slate-800 rounded-lg p-3">
+                            <p class="text-slate-400 text-sm mb-2">请确认评估结果，或重新生成：</p>
+                            <div class="flex gap-2">
+                                <button onclick="regeneratePhase1Assessment()" class="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 再生成一次</button>
+                                <button onclick="confirmPhase1Content()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认评估结果</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function confirmPhase1Content() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const result = currentPhaseResult;
+
+            // 生成确认后的HTML内容
+            const confirmedContent = `
+                <div class="space-y-4">
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                        <p class="text-green-400 font-semibold mb-2">✅ 你已经理解：</p>
+                        <ul class="text-sm text-slate-300 list-disc list-inside">
+                            ${result.strengths.map(s => `<li>${s}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ${result.weaknesses?.length ? `
+                    <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                        <p class="text-amber-400 font-semibold mb-2">⚠️ 需要关注：</p>
+                        <ul class="text-sm text-slate-300 list-disc list-inside">
+                            ${result.weaknesses.map(w => `<li>${w}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+                    <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                        <p class="text-indigo-400 font-semibold mb-1">📊 学习难度：${result.difficulty}</p>
+                        <p class="text-sm text-slate-400">将重点关注：${result.focusAreas?.join('、') || '核心概念'}</p>
+                    </div>
+                </div>
+            `;
+
+            // 保存确认内容
+            phaseConfirmedContents.phase1.confirmed = true;
+            phaseConfirmedContents.phase1.content = confirmedContent;
+
+            // 保存到step
+            step.phaseConfirmedContents = phaseConfirmedContents;
+            step.phases[0].result = result;
+            currentPhaseResult = result;
+
+            // 保存到数据库
+            await dbUpdate('projects', p);
+
+            // 刷新currentProject以确保数据同步
+            currentProject = await dbGet('projects', p.id);
+
+            // 显示确认后的界面 - 更新整个phaseContent而不是只更新phaseActionArea
+            const mainContentEl = document.getElementById('phaseContent');
+            mainContentEl.innerHTML = getConfirmedPhaseContent(1, confirmedContent);
+        }
+
+        // ==================== Phase 2: 框架（知识网络）====================
+        async function startPhase2() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">🗺️ AI 正在构建知识框架...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                // 获取章节内容（如果是PDF，获取对应chunk；如果是文本，获取前2000字）
+                let chapterContent = '';
+                if (p.material.type === 'pdf' && step.chunkId) {
+                    // 从fullText中提取对应章节内容
+                    const chunkIndex = parseInt(step.chunkId.replace('c', '')) - 1;
+                    // 简单处理：如果检测到章节，使用章节附近的文本
+                    chapterContent = p.material.fullText.substring(0, 3000);
+                } else {
+                    chapterContent = p.material.content || p.material.preview || '';
+                }
+
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `请为以下内容建立知识框架，帮助学生理解其在整体知识体系中的位置。
+
+当前学习：${step.title}
+
+本章内容预览：
+${chapterContent.substring(0, 2000)}
+
+${p.plan.outline ? `全书大纲：${p.plan.outline}` : ''}
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "prerequisites": ["前置知识1", "前置知识2"],
+  "currentPosition": "当前内容在整体中的位置说明",
+  "nextSteps": ["后续连接1", "后续连接2"],
+  "crossConnections": ["跨学科关联1", "跨学科关联2"],
+  "framework": "用清晰的结构呈现知识网络（可以是列表或层次结构）"
+}`
+                }]);
+
+                const result = parseAIResponse(response.content);
+
+                // 存储结果
+                currentPhaseResult = result;
+
+                // 专门渲染知识框架的函数
+                const renderFramework = (framework) => {
+                    if (!framework) return '';
+                    if (typeof framework === 'string') return framework;
+
+                    // 处理模块数组结构
+                    if (Array.isArray(framework)) {
+                        let markdown = '';
+                        framework.forEach((module, idx) => {
+                            if (typeof module === 'string') {
+                                markdown += `## ${module}\n\n`;
+                            } else if (typeof module === 'object') {
+                                const moduleName = module.模块 || module.module || module.title || `模块 ${idx + 1}`;
+                                markdown += `## ${moduleName}\n\n`;
+
+                                // 核心概念
+                                if (module.核心概念) {
+                                    const concepts = Array.isArray(module.核心概念) ? module.核心概念 : [module.核心概念];
+                                    markdown += `**核心概念**：${concepts.join('、')}\n\n`;
+                                }
+
+                                // 关键问题/定义/目标
+                                if (module.关键问题) {
+                                    markdown += `**关键问题**：${module.关键问题}\n\n`;
+                                } else if (module.定义) {
+                                    markdown += `**定义**：${module.定义}\n\n`;
+                                } else if (module.目标) {
+                                    markdown += `**目标**：${module.目标}\n\n`;
+                                }
+
+                                // 启示/后果/案例
+                                if (module.启示) {
+                                    markdown += `**启示**：${module.启示}\n\n`;
+                                } else if (module.后果) {
+                                    markdown += `**后果**：${module.后果}\n\n`;
+                                } else if (module.案例) {
+                                    markdown += `**案例**：${module.案例}\n\n`;
+                                }
+
+                                // 三大基因/核心策略/行动起点（子项）
+                                const subItems = module.三大基因 || module.核心策略 || module.子项 || module.行动起点;
+                                if (subItems && Array.isArray(subItems)) {
+                                    subItems.forEach(sub => {
+                                        if (typeof sub === 'string') {
+                                            markdown += `### ${sub}\n\n`;
+                                        } else if (typeof sub === 'object') {
+                                            const geneName = sub.基因 || sub.策略 || sub.名称 || '';
+                                            const geneContent = sub.表现 || sub.内容 || sub.说明 || '';
+                                            const geneProducts = sub.文化产物 || sub.产物 || [];
+
+                                            markdown += `### ${geneName}\n\n`;
+                                            if (geneContent) {
+                                                markdown += `${geneContent}\n\n`;
+                                            }
+
+                                            if (geneProducts.length > 0) {
+                                                markdown += '**具体表现**：\n';
+                                                geneProducts.forEach(product => {
+                                                    if (typeof product === 'string') {
+                                                        markdown += `- ${product}\n`;
+                                                    } else if (typeof product === 'object') {
+                                                        const title = product.名称 || product.title || product.表现 || Object.keys(product)[0];
+                                                        markdown += `- ${title}\n`;
+                                                    }
+                                                });
+                                                markdown += '\n';
+                                            }
+                                        }
+                                    });
+                                }
+                            }
+                        });
+                        return renderMarkdown(markdown);
+                    }
+
+                    // 处理核心主题 + 子主题结构
+                    if (framework.核心主题 && framework.子主题) {
+                        let markdown = `## 📌 核心主题\n\n${framework.核心主题}\n\n`;
+                        const subTopics = framework.子主题;
+                        if (Array.isArray(subTopics)) {
+                            subTopics.forEach((topic, idx) => {
+                                markdown += `### ${idx + 1}. ${topic.概念 || topic.title || topic}\n\n`;
+                                if (topic.内容) {
+                                    if (Array.isArray(topic.内容)) {
+                                        markdown += topic.内容.map(c => `- ${c}`).join('\n');
+                                    } else {
+                                        markdown += topic.内容;
+                                    }
+                                    markdown += '\n\n';
+                                }
+                            });
+                        }
+                        return renderMarkdown(markdown);
+                    }
+
+                    // 通用对象展开
+                    if (typeof framework === 'object' && framework !== null) {
+                        let markdown = '';
+                        Object.entries(framework).forEach(([key, value]) => {
+                            markdown += `### ${key}\n\n${displayArray(value)}\n\n`;
+                        });
+                        return renderMarkdown(markdown);
+                    }
+
+                    return displayArray(framework);
+                };
+
+                // 辅助函数：安全地显示数组、对象或字符串（支持深度嵌套和中文键）
+                const displayArray = (data) => {
+                    const renderValue = (val, depth = 0) => {
+                        if (!val && val !== 0 && val !== false) return '';
+                        if (typeof val === 'string') return val;
+                        if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+                        if (Array.isArray(val)) {
+                            if (depth > 3) return '[嵌套层级过深]';
+                            return val.map(item => renderValue(item, depth + 1)).filter(v => v).join('；');
+                        }
+                        if (typeof val === 'object' && val !== null) {
+                            const parts = [];
+
+                            // 处理中文键名的特殊结构
+                            if (val.核心主题 || val.coreTopic) {
+                                parts.push(`<strong>核心主题：</strong>${val.核心主题 || val.coreTopic}`);
+                            }
+                            if (val.子主题 || val.subTopics) {
+                                const subTopics = val.子主题 || val.subTopics;
+                                if (Array.isArray(subTopics)) {
+                                    const rendered = subTopics.map(st => {
+                                        if (typeof st === 'string') return st;
+                                        if (typeof st === 'object') {
+                                            const concept = st.概念 || st.concept || '';
+                                            const content = st.内容 || st.content || '';
+                                            let item = '';
+                                            if (concept) item += `<strong>${concept}</strong>`;
+                                            if (Array.isArray(content)) {
+                                                const contentStr = content.map(c => {
+                                                    if (typeof c === 'string') return c;
+                                                    if (typeof c === 'object') return renderValue(c, depth + 1);
+                                                    return String(c);
+                                                }).join('；');
+                                                item += `：${contentStr}`;
+                                            } else if (content && typeof content === 'string') {
+                                                item += `：${content}`;
+                                            } else if (content) {
+                                                item += `：${renderValue(content, depth + 1)}`;
+                                            }
+                                            return item;
+                                        }
+                                        return renderValue(st, depth + 1);
+                                    }).join('<br>&nbsp;&nbsp;&nbsp;');
+                                    parts.push(`<strong>子主题：</strong><br>&nbsp;&nbsp;&nbsp;${rendered}`);
+                                }
+                            }
+
+                            // 通用字段处理（中英文键名）
+                            const textFields = ['text', 'text', 'name', 'title', 'value', 'content', 'description',
+                                               '文本', '名称', '标题', '值', '内容', '描述'];
+                            for (const field of textFields) {
+                                if (val[field] && parts.length === 0) {
+                                    parts.push(renderValue(val[field], depth));
+                                    break;
+                                }
+                            }
+
+                            // 如果没有找到特殊字段，尝试展开对象
+                            if (parts.length === 0) {
+                                const entries = Object.entries(val);
+                                if (entries.length <= 4) {
+                                    return entries.map(([k, v]) => `${k}: ${renderValue(v, depth)}`).join(' | ');
+                                }
+                                return '[复杂数据结构]';
+                            }
+
+                            return parts.join('<br><br>') || '[数据对象]';
+                        }
+                        return String(val);
+                    };
+
+                    const result = renderValue(data);
+                    return result || '';
+                };
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">📍 知识位置</p>
+                            <p class="text-slate-300">${displayArray(result.currentPosition)}</p>
+                        </div>
+
+                        ${result.prerequisites && (Array.isArray(result.prerequisites) && result.prerequisites.length > 0) ? `
+                        <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+                            <p class="text-blue-400 font-semibold mb-2">⬅️ 前置知识</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.prerequisites.map(item => `<li>${displayArray(item)}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        ${result.nextSteps && (Array.isArray(result.nextSteps) && result.nextSteps.length > 0) ? `
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">➡️ 后续学习</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.nextSteps.map(item => `<li>${displayArray(item)}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        ${result.crossConnections && (Array.isArray(result.crossConnections) && result.crossConnections.length > 0) ? `
+                        <div class="bg-purple-900/30 border border-purple-700 rounded-lg p-4">
+                            <p class="text-purple-400 font-semibold mb-2">🔗 跨学科关联</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.crossConnections.map(item => `<li>${displayArray(item)}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">🗺️ 知识框架</p>
+                            <div class="text-slate-300 text-sm">${renderFramework(result.framework)}</div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="selectPhase(1)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="selectPhase(3)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="analyzeOriginalStructure()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">📋 分析原文结构</button>
+                            <button onclick="regeneratePhase2()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
+                            <button onclick="confirmPhase2Content()" class="col-span-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function regeneratePhase2() {
+            await startPhase2();
+        }
+
+        async function confirmPhase2Content() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const result = currentPhaseResult;
+
+            // 生成确认后的HTML内容
+            const confirmedContent = `
+                <div class="space-y-4">
+                    <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                        <p class="text-indigo-400 font-semibold mb-2">📍 知识位置</p>
+                        <p class="text-slate-300">${result.currentPosition}</p>
+                    </div>
+                    ${result.prerequisites && (Array.isArray(result.prerequisites) && result.prerequisites.length > 0) ? `
+                    <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+                        <p class="text-blue-400 font-semibold mb-2">⬅️ 前置知识</p>
+                        <ul class="text-sm text-slate-300 list-disc list-inside">
+                            ${result.prerequisites.map(item => `<li>${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+                    ${result.nextSteps && (Array.isArray(result.nextSteps) && result.nextSteps.length > 0) ? `
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                        <p class="text-green-400 font-semibold mb-2">➡️ 后续学习</p>
+                        <ul class="text-sm text-slate-300 list-disc list-inside">
+                            ${result.nextSteps.map(item => `<li>${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+                    ${result.crossConnections && (Array.isArray(result.crossConnections) && result.crossConnections.length > 0) ? `
+                    <div class="bg-purple-900/30 border border-purple-700 rounded-lg p-4">
+                        <p class="text-purple-400 font-semibold mb-2">🔗 跨学科关联</p>
+                        <ul class="text-sm text-slate-300 list-disc list-inside">
+                            ${result.crossConnections.map(item => `<li>${item}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+                </div>
+            `;
+
+            // 保存确认内容
+            phaseConfirmedContents.phase2.confirmed = true;
+            phaseConfirmedContents.phase2.content = confirmedContent;
+
+            // 保存到step
+            step.phaseConfirmedContents = phaseConfirmedContents;
+            step.phases[1].result = result;
+            currentPhaseResult = result;
+
+            // 保存到数据库
+            await dbUpdate('projects', p);
+
+            // 刷新currentProject以确保数据同步
+            currentProject = await dbGet('projects', p.id);
+
+            // 显示确认后的界面 - 更新整个phaseContent
+            const mainContentEl = document.getElementById('phaseContent');
+            mainContentEl.innerHTML = getConfirmedPhaseContent(2, confirmedContent);
+        }
+
+        // ==================== Phase 3: 学习（原理讲解）====================
+        // ==================== Phase 3: 学习（分步讲解）====================
+        // 分步讲解状态
+        let phase3Steps = [];
+        let currentStepIndex = 0;
+        let phase3Discussions = [];
+        let phase3IncludeInFeynman = false;
+        let phase3ConfirmedSteps = []; // 已确认的步骤（保存内容）
+        let phase3StepContents = []; // 每个步骤的内容（可能被重新生成）
+        let chapterContentForRegen = ''; // 保存章节内容用于重新生成
+
+        async function startPhase3() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">📖 AI 正在分析原文，准备分步讲解...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                // 获取章节内容并保存
+                let chapterContent = '';
+                if (p.material.type === 'pdf') {
+                    chapterContent = p.material.fullText || p.material.preview || '';
+                } else {
+                    chapterContent = p.material.content || '';
+                }
+                chapterContentForRegen = chapterContent;
+
+                // 检查是否有已保存的步骤内容
+                const savedSteps = step.phases[2]?.confirmedSteps;
+                if (savedSteps && savedSteps.length > 0) {
+                    // 恢复已保存的步骤
+                    phase3ConfirmedSteps = savedSteps;
+                    phase3Steps = savedSteps.map(s => ({ title: s.title, content: s.content }));
+                    phase3StepContents = savedSteps.map(s => s.content);
+                    currentStepIndex = 0;
+                    phase3Discussions = step.phases[2]?.discussions || [];
+                    phase3IncludeInFeynman = step.phases[2]?.includeInFeynman || false;
+
+                    // 显示第一步
+                    showPhase3Step();
+                    return;
+                }
+
+                // 重置状态
+                phase3Steps = [];
+                phase3StepContents = [];
+                phase3ConfirmedSteps = [];
+                currentStepIndex = 0;
+                phase3Discussions = [];
+                phase3IncludeInFeynman = false;
+
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `请将以下学习内容分解为3-5个讲解步骤，每步是一个独立的、易于理解的知识点。
+
+学习主题：${step.title}
+
+原文内容：
+${chapterContent.substring(0, 6000)}
+
+要求：
+1. 忠实原文，不要添加原文没有的内容
+2. 将内容按逻辑分解为3-5个步骤
+3. 每个步骤包含：标题、详细讲解内容（使用Markdown格式）
+4. 步骤之间要有逻辑递进关系
+5. 每步内容要完整但不过长
+
+只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "steps": [
+    {
+      "title": "步骤标题",
+      "content": "步骤详细内容（使用Markdown格式）"
+    }
+  ]
+}`
+                }], { maxTokens: 8192 });
+
+                const result = parseAIResponse(response.content);
+                phase3Steps = result.steps || [];
+
+                if (phase3Steps.length === 0) {
+                    throw new Error('未能分解讲解步骤');
+                }
+
+                // 初始化步骤内容数组
+                phase3StepContents = phase3Steps.map(s => s.content);
+
+                // 显示第一步
+                showPhase3Step();
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        function showPhase3Step() {
+            const contentEl = document.getElementById('phaseActionArea');
+            const step = phase3Steps[currentStepIndex];
+            const totalSteps = phase3Steps.length;
+            const isConfirmed = phase3ConfirmedSteps.some(s => s.stepIndex === currentStepIndex);
+
+            contentEl.innerHTML = `
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                        <span class="text-slate-400 text-sm">步骤 ${currentStepIndex + 1} / ${totalSteps} ${isConfirmed ? '✓ 已确认' : ''}</span>
+                        <div class="flex gap-1">
+                            ${phase3Steps.map((_, i) => `
+                                <div class="w-2 h-2 rounded-full ${
+                                    i < currentStepIndex ? 'bg-green-500' :
+                                    i === currentStepIndex ? 'bg-indigo-500' :
+                                    'bg-slate-600'
+                                } ${phase3ConfirmedSteps.some(s => s.stepIndex === i) ? 'ring-2 ring-green-300' : ''}"></div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-900 rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-indigo-400 mb-3">${step.title}</h4>
+                        <div class="text-slate-300 window-content max-h-[350px] overflow-y-auto">
+                            ${renderMarkdown(phase3StepContents[currentStepIndex] || step.content)}
+                        </div>
+                    </div>
+
+                    ${isConfirmed ? `
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-3">
+                        <p class="text-green-400 text-sm text-center">✓ 此内容已确认</p>
+                    </div>
+
+                    <div class="bg-slate-800 rounded-lg p-3">
+                        <p class="text-slate-400 text-sm mb-2">内容已确认，接下来：</p>
+                        <div class="grid grid-cols-3 gap-2">
+                            ${currentStepIndex < phase3Steps.length - 1 ? `
+                            <button onclick="nextStep3()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm">下一步 →</button>
+                            ` : `
+                            <button onclick="showPhase3Complete()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm">完成学习 →</button>
+                            `}
+                            <button onclick="showDiscussionInput()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">💬 需要讨论</button>
+                            <button onclick="resetStepConfirmation()" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg text-sm">修改内容</button>
+                        </div>
+                    </div>
+                    ` : `
+                    <div class="bg-slate-800 rounded-lg p-3">
+                        <p class="text-slate-400 text-sm mb-2">请先确认学习内容</p>
+                        <div class="flex gap-2">
+                            <button onclick="regenerateStep()" class="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 重新生成</button>
+                            <button onclick="confirmStepContent()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                        </div>
+                    </div>
+                    `}
+
+                    ${currentStepIndex > 0 ? `
+                    <button onclick="previousStep3()" class="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function showDiscussionInput() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = `
+                <div class="space-y-4">
+                    <div class="bg-slate-900 rounded-lg p-4">
+                        <h4 class="text-lg font-semibold text-indigo-400 mb-3">${phase3Steps[currentStepIndex].title}</h4>
+                        <p class="text-slate-400 text-sm mb-2">请写下你的疑问或想讨论的内容：</p>
+                        <textarea id="discussionInput" class="w-full h-32 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="例如：这个概念我不太理解..."></textarea>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="submitDiscussion()" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg">提交讨论</button>
+                        <button onclick="showPhase3Step()" class="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg">取消</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function regenerateStep() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">🔄 AI 正在重新生成这一步...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const currentStep = phase3Steps[currentStepIndex];
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `请为学生重新讲解以下知识点，要求与之前不同但同样准确。
+
+学习主题：${step.title}
+当前步骤：${currentStep.title}
+
+原文内容：
+${chapterContentForRegen.substring(0, 6000)}
+
+要求：
+1. 忠实原文，不要添加原文没有的内容
+2. 使用不同的讲解方式、例子或表达
+3. 保持内容准确
+4. 使用 Markdown 格式
+
+请直接输出讲解内容。`
+                }], { maxTokens: 4096 });
+
+                // 更新当前步骤的内容
+                phase3StepContents[currentStepIndex] = response.content;
+
+                // 重新显示
+                showPhase3Step();
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function confirmStepContent() {
+            // 确认当前步骤的内容
+            const confirmedStep = {
+                stepIndex: currentStepIndex,
+                title: phase3Steps[currentStepIndex].title,
+                content: phase3StepContents[currentStepIndex],
+                confirmedAt: new Date().toISOString()
+            };
+
+            // 检查是否已经确认过
+            const existingIndex = phase3ConfirmedSteps.findIndex(s => s.stepIndex === currentStepIndex);
+            if (existingIndex >= 0) {
+                phase3ConfirmedSteps[existingIndex] = confirmedStep;
+            } else {
+                phase3ConfirmedSteps.push(confirmedStep);
+            }
+
+            // 保存到项目
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            step.phases[2].confirmedSteps = phase3ConfirmedSteps;
+            await dbUpdate('projects', p);
+
+            // 重新显示（现在会显示已确认状态）
+            showPhase3Step();
+        }
+
+        function resetStepConfirmation() {
+            // 取消确认，允许修改内容
+            phase3ConfirmedSteps = phase3ConfirmedSteps.filter(s => s.stepIndex !== currentStepIndex);
+
+            // 更新项目
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            step.phases[2].confirmedSteps = phase3ConfirmedSteps;
+            dbUpdate('projects', p);
+
+            // 重新显示
+            showPhase3Step();
+        }
+
+        function nextStep3() {
+            currentStepIndex++;
+            if (currentStepIndex < phase3Steps.length) {
+                showPhase3Step();
+            } else {
+                showPhase3Complete();
+            }
+        }
+
+        async function submitDiscussion() {
+            const discussionInput = document.getElementById('discussionInput');
+            const userQuestion = discussionInput.value.trim();
+
+            if (!userQuestion) {
+                alert('请输入你的疑问');
+                return;
+            }
+
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">💭 AI 正在准备回答...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const currentStep = phase3Steps[currentStepIndex];
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `学生正在学习"${step.title}"的"${currentStep.title}"这一步。
+
+学生提出了以下疑问或讨论：
+${userQuestion}
+
+请给出详细的解答或讨论。
+
+要求：
+1. 直接回答学生的问题
+2. 如果是疑问，提供清晰的解释和例子
+3. 如果是讨论，给出有价值的见解
+4. 使用 Markdown 格式
+
+请直接输出解答内容。`
+                }], { maxTokens: 4096 });
+
+                // 记录讨论
+                phase3Discussions.push({
+                    stepIndex: currentStepIndex,
+                    stepTitle: currentStep.title,
+                    status: 'discussed',
+                    userQuestion: userQuestion,
+                    aiResponse: response.content
+                });
+
+                // 显示AI回答并询问是否继续
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">💬 你的问题</p>
+                            <p class="text-slate-300">${userQuestion}</p>
+                        </div>
+
+                        <div class="bg-slate-900 rounded-lg p-4 max-h-[300px] overflow-y-auto window-content">
+                            ${renderMarkdown(response.content)}
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="showPhase3Step()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg">✓ 返回学习</button>
+                            <button onclick="showDiscussionInput()" class="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg">继续讨论</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        function previousStep3() {
+            if (currentStepIndex > 0) {
+                currentStepIndex--;
+                showPhase3Step();
+            }
+        }
+
+        async function showPhase3Complete() {
+            const contentEl = document.getElementById('phaseActionArea');
+
+            // 询问是否在费曼环节包含这些内容
+            contentEl.innerHTML = `
+                <div class="space-y-4">
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4 text-center">
+                        <p class="text-4xl mb-2">📖</p>
+                        <p class="text-green-400 font-semibold">所有讲解步骤已完成！</p>
+                    </div>
+
+                    <div class="bg-slate-800 rounded-lg p-4">
+                        <h4 class="font-semibold mb-3">📊 学习总结</h4>
+                        <div class="text-sm text-slate-300 space-y-2">
+                            <p>• 共学习 ${phase3Steps.length} 个步骤</p>
+                            <p>• 产生 ${phase3Discussions.filter(d => d.status === 'discussed').length} 次讨论</p>
+                        </div>
+                    </div>
+
+                    <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                        <p class="text-indigo-400 font-semibold mb-3">🗣️ 费曼环节设置</p>
+                        <p class="text-slate-300 text-sm mb-3">在接下来的费曼检验中，是否要求你用自己的话解释今天学习的内容？</p>
+                        <div class="flex gap-2">
+                            <button onclick="setFeynmanPreference(true)" class="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg">是，我要费曼输出</button>
+                            <button onclick="setFeynmanPreference(false)" class="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg">否，跳过费曼</button>
+                        </div>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button onclick="selectPhase(2)" class="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-bold">← 上一步</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function setFeynmanPreference(includeInFeynmanParam) {
+            phase3IncludeInFeynman = includeInFeynmanParam;
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            // 存储学习结果，包括讨论记录和确认的步骤
+            const result = {
+                summary: '已完成分步学习',
+                steps: phase3Steps.map(s => s.title),
+                discussions: phase3Discussions,
+                confirmedSteps: phase3ConfirmedSteps,
+                includeInFeynman: phase3IncludeInFeynman,
+                content: phase3Steps.map((s, i) => `## ${s.title}\n\n${phase3StepContents[i] || s.content}`).join('\n\n')
+            };
+
+            currentPhaseResult = result;
+
+            // 更新步骤的Phase 3配置，供Phase 4使用
+            step.phases[2].feynmanConfig = {
+                includeInFeynman: phase3IncludeInFeynman,
+                learnedTopics: phase3Steps.map(s => s.title),
+                discussions: phase3Discussions,
+                confirmedSteps: phase3ConfirmedSteps
+            };
+            step.phases[2].discussions = phase3Discussions;
+            step.phases[2].confirmedSteps = phase3ConfirmedSteps;
+            await dbUpdate('projects', p);
+
+            // 显示确认并进入下一步
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = `
+                <div class="space-y-4">
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4 text-center">
+                        <p class="text-green-400 font-semibold">✓ 设置已保存</p>
+                        <p class="text-slate-400 text-sm">${phase3IncludeInFeynman ? '费曼环节将包含今天学习的内容' : '将跳过费曼环节'}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="selectPhase(2)" class="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-bold">← 上一步</button>
+                        <button onclick="completePhaseSimple(3)" class="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold">完成学习，下一步 →</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ==================== Phase 4: 费曼（检验理解）====================
+        async function startPhase4() {
+            const contentEl = document.getElementById('phaseActionArea');
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            // 检查Phase 3的配置
+            const feynmanConfig = step.phases[2]?.feynmanConfig;
+
+            if (!feynmanConfig || !feynmanConfig.includeInFeynman) {
+                // 用户选择跳过费曼，直接跳过这个阶段
+                await skipPhase(4);
+                return;
+            }
+
+            contentEl.innerHTML = '<p class="loading text-center py-8">🗣️ AI 正在准备费曼检验...</p>';
+
+            try {
+                // 获取Phase 3的学习内容
+                const learnedTopics = feynmanConfig.learnedTopics || [];
+                const discussions = feynmanConfig.discussions || [];
+
+                // 获取章节内容用于生成参考样本
+                let chapterContent = '';
+                if (p.material.type === 'pdf') {
+                    chapterContent = p.material.fullText || p.material.preview || '';
+                } else {
+                    chapterContent = p.material.content || '';
+                }
+
+                // 生成费曼任务说明和参考样本
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `学生刚刚学习了"${step.title}"，学习了以下内容：
+${learnedTopics.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+${discussions.filter(d => d.status === 'discussed').length > 0 ? `
+学习过程中产生了以下讨论：
+${discussions.filter(d => d.status === 'discussed').map(d => `- ${d.stepTitle}: ${d.userQuestion}`).join('\n')}
+` : ''}
+
+现在需要进行费曼检验。请完成以下任务：
+
+1. 生成具体的费曼任务：告诉学生需要用自己的话解释哪些具体内容
+2. 提供一个参考样本：展示如何进行费曼输出（200字左右）
+3. 给出评估要点：说明会从哪些角度评估学生的输出
+
+只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "task": "请用自己的话解释以下内容：...",
+  "sample": "这里是参考样本，展示如何用通俗的语言解释概念...",
+  "criteria": ["要点1", "要点2", "要点3"]
+}
+
+要求：
+- task要具体明确，列出需要解释的关键点
+- sample要简洁易懂，展示优秀的费曼输出
+- criteria要清晰可评估`
+                }], { maxTokens: 4096 });
+
+                const result = parseAIResponse(response.content);
+                step.phases[3].feynmanTask = result;
+
+                // 显示费曼任务和样本
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">📝 费曼任务</p>
+                            <p class="text-slate-300">${result.task}</p>
+                        </div>
+
+                        <div class="bg-slate-800 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">💡 参考样本</p>
+                            <div class="text-slate-300 text-sm bg-slate-900 rounded p-3 max-h-[200px] overflow-y-auto">
+                                ${result.sample}
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-800 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">✅ 评估要点</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.criteria.map(c => `<li>${c}</li>`).join('')}
+                            </ul>
+                        </div>
+
+                        <div class="bg-slate-700 rounded-lg p-3">
+                            <p class="text-slate-300 text-sm mb-2">现在轮到你了！请参考上面的样本，用自己的话解释：</p>
+                            <p class="text-indigo-300 text-sm">${result.task}</p>
+                        </div>
+
+                        <textarea id="phase4Answer" class="w-full h-40 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="写下你的费曼输出..."></textarea>
+
+                        <div class="flex gap-2">
+                            <button onclick="selectPhase(3)" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg">← 上一步</button>
+                            <button onclick="submitPhase4()" class="flex-1 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg">提交输出</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function submitPhase4() {
+            const answer = document.getElementById('phase4Answer').value.trim();
+            if (!answer) {
+                alert('请写下你的解释');
+                return;
+            }
+
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">📊 AI 正在评估你的理解...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `学生刚刚学习了"${step.title}"，以下是他的解释：
+
+${answer}
+
+请评估：
+1. 理解程度 (完全理解/基本理解/需要加强)
+2. 做得好的地方
+3. 理解盲区或错误
+4. 具体改进建议
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "level": "完全理解/基本理解/需要加强",
+  "strengths": ["做得好的地方"],
+  "gaps": ["理解盲区或错误"],
+  "suggestions": ["具体改进建议"]
+}
+
+用鼓励但明确的语气回复。如果理解有误，请温和指出并解释正确概念。`
+                }]);
+
+                const result = parseAIResponse(response.content);
+
+                // 存储结果
+                currentPhaseResult = result;
+
+                const levelColor = result.level === '完全理解' ? 'green' : result.level === '基本理解' ? 'amber' : 'red';
+                const levelIcon = result.level === '完全理解' ? '🎉' : result.level === '基本理解' ? '👍' : '💪';
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-${levelColor}-900/30 border border-${levelColor}-700 rounded-lg p-4 text-center">
+                            <p class="text-4xl mb-2">${levelIcon}</p>
+                            <p class="text-${levelColor}-400 font-semibold text-lg">${result.level}</p>
+                        </div>
+
+                        ${result.strengths?.length ? `
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">✅ 做得很好：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.strengths.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        ${result.gaps?.length ? `
+                        <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">💡 可以加强：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.gaps.map(g => `<li>${g}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        ${result.suggestions?.length ? `
+                        <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+                            <p class="text-blue-400 font-semibold mb-2">📝 建议：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.suggestions.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="selectPhase(3)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="selectPhase(5)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="regeneratePhase4()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
+                            <button onclick="confirmPhase4Content()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function regeneratePhase4() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const feynmanConfig = step.phases[2]?.feynmanConfig;
+
+            if (!feynmanConfig || !feynmanConfig.includeInFeynman) {
+                await skipPhase(4);
+                return;
+            }
+
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">🗣️ AI 正在重新准备费曼检验...</p>';
+
+            try {
+                const learnedTopics = feynmanConfig.learnedTopics || [];
+                const discussions = feynmanConfig.discussions || [];
+
+                let chapterContent = '';
+                if (p.material.type === 'pdf') {
+                    chapterContent = p.material.fullText || p.material.preview || '';
+                } else {
+                    chapterContent = p.material.content || '';
+                }
+
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `学生刚刚学习了"${step.title}"，学习了以下内容：
+${learnedTopics.map((t, i) => `${i + 1}. ${t}`).join('\n')}
+
+${discussions.filter(d => d.status === 'discussed').length > 0 ? `
+学习过程中产生了以下讨论：
+${discussions.filter(d => d.status === 'discussed').map(d => `- ${d.stepTitle}: ${d.userQuestion}`).join('\n')}
+` : ''}
+
+现在需要进行费曼检验。请完成以下任务：
+
+1. 生成具体的费曼任务：告诉学生需要用自己的话解释哪些具体内容
+2. 提供一个参考样本：展示如何进行费曼输出（200字左右）
+3. 给出评估要点：说明会从哪些角度评估学生的输出
+
+只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "task": "请用自己的话解释以下内容：...",
+  "sample": "这里是参考样本，展示如何用通俗的语言解释概念...",
+  "criteria": ["要点1", "要点2", "要点3"]
+}
+
+要求：
+- task要具体明确，列出需要解释的关键点
+- sample要简洁易懂，展示优秀的费曼输出
+- criteria要清晰可评估`
+                }], { maxTokens: 4096 });
+
+                const result = parseAIResponse(response.content);
+                step.phases[3].feynmanTask = result;
+                currentPhaseResult = result;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">📝 费曼任务</p>
+                            <p class="text-slate-300">${result.task}</p>
+                        </div>
+
+                        <div class="bg-slate-800 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">💡 参考样本</p>
+                            <div class="text-slate-300 text-sm bg-slate-900 rounded p-3 max-h-[200px] overflow-y-auto">
+                                ${result.sample}
+                            </div>
+                        </div>
+
+                        <div class="bg-slate-800 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">✅ 评估要点</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.criteria.map(c => `<li>${c}</li>`).join('')}
+                            </ul>
+                        </div>
+
+                        <div class="bg-slate-700 rounded-lg p-3">
+                            <p class="text-slate-300 text-sm mb-2">现在轮到你了！请参考上面的样本，用自己的话解释：</p>
+                            <p class="text-indigo-300 text-sm">${result.task}</p>
+                        </div>
+
+                        <textarea id="phase4Answer" class="w-full h-40 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm" placeholder="写下你的费曼输出..."></textarea>
+
+                        <div class="flex gap-2">
+                            <button onclick="selectPhase(3)" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg">← 上一步</button>
+                            <button onclick="submitPhase4()" class="flex-1 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg">提交输出</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function confirmPhase4Content() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const result = currentPhaseResult;
+
+            // 判断是费曼任务还是评估结果
+            const isEvaluationResult = result.level !== undefined;
+
+            // 生成确认后的HTML内容
+            let confirmedContent = '';
+
+            if (isEvaluationResult) {
+                // 评估结果
+                const levelColor = result.level === '完全理解' ? 'green' : result.level === '基本理解' ? 'amber' : 'red';
+                const levelIcon = result.level === '完全理解' ? '🎉' : result.level === '基本理解' ? '👍' : '💪';
+
+                confirmedContent = `
+                    <div class="space-y-4">
+                        <div class="bg-${levelColor}-900/30 border border-${levelColor}-700 rounded-lg p-4 text-center">
+                            <p class="text-4xl mb-2">${levelIcon}</p>
+                            <p class="text-${levelColor}-400 font-semibold text-lg">${result.level}</p>
+                        </div>
+
+                        ${result.strengths?.length ? `
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">✅ 做得很好：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.strengths.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        ${result.gaps?.length ? `
+                        <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">💡 可以加强：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.gaps.map(g => `<li>${g}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        ${result.suggestions?.length ? `
+                        <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+                            <p class="text-blue-400 font-semibold mb-2">📝 建议：</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.suggestions.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            } else {
+                // 费曼任务
+                confirmedContent = `
+                    <div class="space-y-4">
+                        <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">📝 费曼任务</p>
+                            <p class="text-slate-300">${result.task}</p>
+                        </div>
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">✅ 评估要点</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${(result.criteria || []).map(c => `<li>${c}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // 保存确认内容
+            phaseConfirmedContents.phase4.confirmed = true;
+            phaseConfirmedContents.phase4.content = confirmedContent;
+
+            // 保存到step
+            step.phaseConfirmedContents = phaseConfirmedContents;
+            step.phases[3].result = result;
+            currentPhaseResult = result;
+
+            // 保存到数据库
+            await dbUpdate('projects', p);
+
+            // 刷新currentProject以确保数据同步
+            currentProject = await dbGet('projects', p.id);
+
+            // 显示确认后的界面
+            const contentEl = document.getElementById('phaseActionArea');
+            const mainContentEl = document.getElementById('phaseContent');
+            mainContentEl.innerHTML = getConfirmedPhaseContent(4, confirmedContent);
+        }
+
+        // ==================== Phase 5: 考试（练习题）====================
+        let currentQuestions = null;
+
+        async function startPhase5() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">📝 AI 正在生成练习题...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                // 获取章节内容
+                let chapterContent = '';
+                if (p.material.type === 'pdf') {
+                    chapterContent = p.material.fullText || p.material.preview || '';
+                } else {
+                    chapterContent = p.material.content || '';
+                }
+
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `根据以下学习内容，生成5道练习题来检验理解。
+
+学习主题：${step.title}
+关键点：${step.keyPoints?.join('、') || '核心概念'}
+
+内容预览：
+${chapterContent.substring(0, 2000)}
+
+题目要求：
+1. 3道选择题（考察概念理解）
+2. 1道简答题（考察表达能力）
+3. 1道应用题（考察实际运用）
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "questions": [
+    {
+      "id": 1,
+      "type": "choice",
+      "question": "题目内容",
+      "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"],
+      "correctAnswer": "A",
+      "explanation": "解析"
+    },
+    {
+      "id": 2,
+      "type": "short",
+      "question": "简答题题目",
+      "sampleAnswer": "参考答案要点",
+      "keyPoints": ["要点1", "要点2"]
+    },
+    {
+      "id": 3,
+      "type": "application",
+      "question": "应用题题目",
+      "sampleAnswer": "参考答案",
+      "criteria": ["评分标准1", "评分标准2"]
+    }
+  ]
+}`
+                }]);
+
+                const result = parseAIResponse(response.content);
+                currentQuestions = result.questions;
+
+                // 渲染题目
+                contentEl.innerHTML = `
+                    <div class="space-y-6">
+                        ${result.questions.map((q, idx) => renderQuestion(q, idx)).join('')}
+                        <button type="button" onclick="submitPhase5()" class="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold cursor-pointer">
+                            提交答案
+                        </button>
+                    </div>
+                `;
+
+                // 调试：检查函数是否可用
+                console.log('submitPhase5 函数存在:', typeof submitPhase5 === 'function');
+                console.log('题目数量:', result.questions.length);
+                console.log('题目数据:', result.questions);
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        function renderQuestion(q, idx) {
+            // 使用 idx 作为唯一标识符，确保与收集答案时一致
+            const qid = idx + 1;
+            console.log(`渲染题目 ${qid}:`, q);
+
+            if (q.type === 'choice') {
+                // 为选项添加字母前缀（如果没有）
+                const letters = ['A', 'B', 'C', 'D', 'E', 'F'];
+                const formattedOptions = q.options.map((opt, i) => {
+                    const letter = letters[i] || String.fromCharCode(65 + i);
+                    // 如果选项已经包含字母前缀（如 "A. xxx"），则直接使用
+                    if (/^[A-Z][.\s]/.test(opt)) {
+                        return { letter, value: letter, display: opt };
+                    }
+                    // 否则添加字母前缀
+                    return { letter, value: letter, display: `${letter}. ${opt}` };
+                });
+                console.log(`  选项格式化后:`, formattedOptions);
+
+                return `
+                    <div class="bg-slate-900 rounded-lg p-4">
+                        <p class="font-semibold mb-3">${idx + 1}. ${q.question}</p>
+                        <div class="space-y-2">
+                            ${formattedOptions.map(opt => `
+                                <label class="flex items-center gap-2 cursor-pointer hover:bg-slate-800 p-2 rounded">
+                                    <input type="radio" name="question_${qid}" value="${opt.value}" data-letter="${opt.letter}" class="w-4 h-4">
+                                    <span>${opt.display}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="bg-slate-900 rounded-lg p-4">
+                        <p class="font-semibold mb-2">${idx + 1}. ${q.question}</p>
+                        <p class="text-xs text-slate-500 mb-2">${q.type === 'short' ? '简答题' : '应用题'}</p>
+                        <textarea id="answer_${qid}" class="w-full h-24 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="写下你的答案..."></textarea>
+                    </div>
+                `;
+            }
+        }
+
+        async function submitPhase5() {
+            console.log('submitPhase5 被调用');
+            const contentEl = document.getElementById('phaseActionArea');
+
+            // 在清空内容前，先收集答案！
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            // 检查 currentQuestions 是否存在
+            if (!currentQuestions || !Array.isArray(currentQuestions)) {
+                console.error('currentQuestions 无效:', currentQuestions);
+                contentEl.innerHTML = '<p class="text-red-400">错误：题目数据无效，请重新生成题目</p>';
+                return;
+            }
+
+            // *** 关键：在清空内容之前先收集答案 ***
+            // 收集答案 - 使用索引确保与渲染时一致
+            const userAnswers = currentQuestions.map((q, idx) => {
+                const qid = idx + 1;
+                if (q.type === 'choice') {
+                    const checked = document.querySelector(`input[name="question_${qid}"]:checked`);
+                    const selected = checked ? checked.value : null;
+
+                    // 如果找不到，尝试所有可能的选择器
+                    if (!checked) {
+                        const allRadios = document.querySelectorAll(`input[name="question_${qid}"]`);
+                        console.log(`选择题 ${qid}: 未找到选中元素, 该name的所有radio数量=${allRadios.length}`);
+                        allRadios.forEach((r, i) => {
+                            console.log(`  radio ${i}: checked=${r.checked}, value=${r.value}`);
+                        });
+                    }
+
+                    console.log(`选择题 ${qid}: 选中="${selected}", 元素存在=${!!checked}`);
+                    return { id: q.id, answer: selected || '未作答' };
+                } else {
+                    const textarea = document.getElementById(`answer_${qid}`);
+                    const answer = textarea ? textarea.value.trim() : '';
+
+                    // 如果找不到，检查是否存在
+                    if (!textarea) {
+                        const allTextareas = document.querySelectorAll('textarea[id^="answer_"]');
+                        console.log(`简答题 ${qid}: 未找到textarea, 页面上所有textarea数量=${allTextareas.length}`);
+                        allTextareas.forEach((t, i) => {
+                            console.log(`  textarea ${i}: id=${t.id}, value长度=${t.value.length}`);
+                        });
+                    }
+
+                    console.log(`简答题 ${qid}: 元素存在=${!!textarea}, 答案长度="${answer.length}", 内容="${answer.substring(0, 50)}..."`);
+                    return { id: q.id, answer: answer || '未作答' };
+                }
+            });
+
+            console.log('所有用户答案:', userAnswers);
+
+            // 现在再清空内容显示加载状态
+            contentEl.innerHTML = '<p class="loading text-center py-8">📊 AI 正在批改...</p>';
+
+            console.log('所有用户答案:', userAnswers);
+
+            try {
+                // 标准化正确答案格式（提取字母部分）
+                const normalizeAnswer = (answer) => {
+                    if (!answer) return '';
+                    const match = String(answer).match(/^([A-Z])/);
+                    return match ? match[1] : String(answer).toUpperCase().trim();
+                };
+
+                // 计算分数（选择题自动判分）
+                let choiceScore = 0;
+                let choiceTotal = 0;
+                const results = currentQuestions.map((q, idx) => {
+                    const userAnswer = userAnswers[idx]?.answer; // 使用索引而不是 id
+                    if (q.type === 'choice') {
+                        choiceTotal++;
+                        const normalizedCorrect = normalizeAnswer(q.correctAnswer);
+                        const normalizedUser = normalizeAnswer(userAnswer);
+                        const isCorrect = normalizedUser === normalizedCorrect && userAnswer !== '未作答';
+                        if (isCorrect) choiceScore++;
+                        console.log(`选择题 ${idx + 1}: 用户="${userAnswer}"(标准化="${normalizedUser}"), 正确="${q.correctAnswer}"(标准化="${normalizedCorrect}"), 结果=${isCorrect}`);
+                        return {
+                            question: q.question,
+                            userAnswer: userAnswer,
+                            correctAnswer: q.correctAnswer,
+                            isCorrect: isCorrect,
+                            explanation: q.explanation
+                        };
+                    } else {
+                        return {
+                            question: q.question,
+                            userAnswer: userAnswer,
+                            sampleAnswer: q.sampleAnswer || q.keyPoints?.join('、'),
+                            needsReview: true
+                        };
+                    }
+                });
+
+                const scorePercent = choiceTotal > 0 ? Math.round((choiceScore / choiceTotal) * 100) : 0;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-slate-900 rounded-lg p-4 text-center">
+                            <p class="text-4xl font-bold ${scorePercent >= 80 ? 'text-green-400' : scorePercent >= 60 ? 'text-amber-400' : 'text-red-400'}">
+                                ${choiceScore}/${choiceTotal}
+                            </p>
+                            <p class="text-slate-400">选择题得分</p>
+                        </div>
+
+                        <div class="space-y-3">
+                            ${results.map((r, idx) => `
+                                <div class="bg-slate-900 rounded-lg p-3">
+                                    <p class="text-sm font-semibold mb-2">${idx + 1}. ${r.question}</p>
+                                    ${r.isCorrect !== undefined ? `
+                                        <div class="text-sm space-y-1">
+                                            <p class="text-slate-400">你的选择：${r.userAnswer || '未作答'}</p>
+                                            <div class="flex items-center gap-2">
+                                                <span class="${r.isCorrect ? 'text-green-400' : 'text-red-400'}">
+                                                    ${r.isCorrect ? '✅ 正确' : `❌ 错误（正确答案：${r.correctAnswer}）`}
+                                                </span>
+                                            </div>
+                                            ${!r.isCorrect ? `<p class="text-xs text-slate-500 mt-1">${r.explanation}</p>` : ''}
+                                        </div>
+                                    ` : `
+                                        <div class="text-sm text-slate-400 space-y-1">
+                                            <p>你的答案：${r.userAnswer && r.userAnswer !== '未作答' ? r.userAnswer : '<span class="text-amber-400">未作答</span>'}</p>
+                                            ${r.sampleAnswer ? `<p class="text-xs text-slate-500">参考答案：${r.sampleAnswer.substring(0, 150)}...</p>` : ''}
+                                        </div>
+                                    `}
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="selectPhase(4)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="selectPhase(6)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="regeneratePhase5()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
+                            <button onclick="confirmPhase5Content()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function completePhase5() {
+            const result = { summary: '已完成练习测试', score: '已记录' };
+            await completePhase(5, result);
+        }
+
+        async function regeneratePhase5() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">📝 AI 正在重新生成练习题...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                let chapterContent = '';
+                if (p.material.type === 'pdf') {
+                    chapterContent = p.material.fullText || p.material.preview || '';
+                } else {
+                    chapterContent = p.material.content || '';
+                }
+
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `根据以下学习内容，生成5道练习题来检验理解。
+
+学习主题：${step.title}
+关键点：${step.keyPoints?.join('、') || '核心概念'}
+
+内容预览：
+${chapterContent.substring(0, 2000)}
+
+题目要求：
+1. 3道选择题（考察概念理解）
+2. 1道简答题（考察表达能力）
+3. 1道应用题（考察实际运用）
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "questions": [
+    {
+      "id": 1,
+      "type": "choice",
+      "question": "题目内容",
+      "options": ["A. 选项1", "B. 选项2", "C. 选项3", "D. 选项4"],
+      "correctAnswer": "A",
+      "explanation": "解析"
+    },
+    {
+      "id": 2,
+      "type": "short",
+      "question": "简答题题目",
+      "sampleAnswer": "参考答案要点",
+      "keyPoints": ["要点1", "要点2"]
+    },
+    {
+      "id": 3,
+      "type": "application",
+      "question": "应用题题目",
+      "sampleAnswer": "参考答案",
+      "criteria": ["评分标准1", "评分标准2"]
+    }
+  ]
+}`
+                }]);
+
+                const result = parseAIResponse(response.content);
+                currentQuestions = result.questions;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-6">
+                        ${result.questions.map((q, idx) => renderQuestion(q, idx)).join('')}
+                        <button onclick="submitPhase5()" class="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold">
+                            提交答案
+                        </button>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function confirmPhase5Content() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            // 生成确认后的HTML内容（显示测试结果摘要）
+            const confirmedContent = `
+                <div class="space-y-4">
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                        <p class="text-green-400 font-semibold mb-2">✅ 练习测试已完成</p>
+                        <p class="text-slate-300 text-sm">您已完成本阶段的练习题测试，答案已记录。</p>
+                    </div>
+                </div>
+            `;
+
+            // 保存确认内容
+            phaseConfirmedContents.phase5.confirmed = true;
+            phaseConfirmedContents.phase5.content = confirmedContent;
+
+            // 保存到step
+            step.phaseConfirmedContents = phaseConfirmedContents;
+
+            // 保存到数据库
+            await dbUpdate('projects', p);
+
+            // 刷新currentProject以确保数据同步
+            currentProject = await dbGet('projects', p.id);
+
+            // 显示确认后的界面
+            const contentEl = document.getElementById('phaseActionArea');
+            const mainContentEl = document.getElementById('phaseContent');
+            mainContentEl.innerHTML = getConfirmedPhaseContent(5, confirmedContent);
+        }
+
+        // ==================== Phase 6: 应用（实际行动）====================
+        async function startPhase6() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">🛠️ AI 正在生成应用建议...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `基于以下学习内容，建议一个实际应用项目或行动。
+
+学习主题：${step.title}
+学习者画像：${p.learnerProfile || '一般学习者'}
+
+请建议一个具体可行的应用项目。
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "projectTitle": "项目标题",
+  "description": "项目描述",
+  "estimatedTime": "预计耗时（如：30分钟、1小时）",
+  "resources": ["所需资源1", "所需资源2"],
+  "steps": ["步骤1", "步骤2", "步骤3"],
+  "successCriteria": ["完成标准1", "完成标准2"],
+  "deliverable": "可以展示的成果"
+}
+
+要求：
+- 项目应该具体可执行
+- 适合学习者的水平
+- 能够巩固所学知识
+- 产出可见成果`
+                }]);
+
+                const result = parseAIResponse(response.content);
+
+                // 存储结果
+                currentPhaseResult = result;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">💡 应用项目</p>
+                            <p class="text-lg font-bold">${result.projectTitle}</p>
+                            <p class="text-slate-300 mt-2">${result.description}</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-900 rounded-lg p-3">
+                                <p class="text-amber-400 text-sm font-semibold">⏱️ 预计耗时</p>
+                                <p class="text-slate-300">${result.estimatedTime}</p>
+                            </div>
+                            <div class="bg-slate-900 rounded-lg p-3">
+                                <p class="text-green-400 text-sm font-semibold">📦 产出成果</p>
+                                <p class="text-slate-300 text-sm">${result.deliverable}</p>
+                            </div>
+                        </div>
+
+                        ${result.resources?.length ? `
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-slate-400 font-semibold mb-2">🔧 所需资源</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.resources.map(r => `<li>${r}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-slate-400 font-semibold mb-2">📋 实施步骤</p>
+                            <ol class="text-sm text-slate-300 list-decimal list-inside space-y-1">
+                                ${result.steps.map(s => `<li>${s}</li>`).join('')}
+                            </ol>
+                        </div>
+
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-slate-400 font-semibold mb-2">✅ 完成标准</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.successCriteria.map(c => `<li>${c}</li>`).join('')}
+                            </ul>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="selectPhase(5)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="selectPhase(7)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="regeneratePhase6()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
+                            <button onclick="confirmPhase6Content()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function regeneratePhase6() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">🛠️ AI 正在重新生成应用建议...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `基于以下学习内容，建议一个实际应用项目或行动。
+
+学习主题：${step.title}
+学习者画像：${p.learnerProfile || '一般学习者'}
+
+请建议一个具体可行的应用项目。
+
+重要：只输出纯 JSON 格式，不要使用 markdown 代码块，格式如下：
+{
+  "projectTitle": "项目标题",
+  "description": "项目描述",
+  "estimatedTime": "预计耗时（如：30分钟、1小时）",
+  "resources": ["所需资源1", "所需资源2"],
+  "steps": ["步骤1", "步骤2", "步骤3"],
+  "successCriteria": ["完成标准1", "完成标准2"],
+  "deliverable": "可以展示的成果"
+}
+
+要求：
+- 项目应该具体可执行
+- 适合学习者的水平
+- 能够巩固所学知识
+- 产出可见成果`
+                }]);
+
+                const result = parseAIResponse(response.content);
+                currentPhaseResult = result;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">💡 应用项目</p>
+                            <p class="text-lg font-bold">${result.projectTitle}</p>
+                            <p class="text-slate-300 mt-2">${result.description}</p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-900 rounded-lg p-3">
+                                <p class="text-amber-400 text-sm font-semibold">⏱️ 预计耗时</p>
+                                <p class="text-slate-300">${result.estimatedTime}</p>
+                            </div>
+                            <div class="bg-slate-900 rounded-lg p-3">
+                                <p class="text-green-400 text-sm font-semibold">📦 产出成果</p>
+                                <p class="text-slate-300 text-sm">${result.deliverable}</p>
+                            </div>
+                        </div>
+
+                        ${result.resources?.length ? `
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-slate-400 font-semibold mb-2">🔧 所需资源</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.resources.map(r => `<li>${r}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-slate-400 font-semibold mb-2">📋 实施步骤</p>
+                            <ol class="text-sm text-slate-300 list-decimal list-inside space-y-1">
+                                ${result.steps.map(s => `<li>${s}</li>`).join('')}
+                            </ol>
+                        </div>
+
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-slate-400 font-semibold mb-2">✅ 完成标准</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.successCriteria.map(c => `<li>${c}</li>`).join('')}
+                            </ul>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="selectPhase(5)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="selectPhase(7)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="regeneratePhase6()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
+                            <button onclick="confirmPhase6Content()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function confirmPhase6Content() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const result = currentPhaseResult;
+
+            // 生成确认后的HTML内容
+            const confirmedContent = `
+                <div class="space-y-4">
+                    <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                        <p class="text-indigo-400 font-semibold mb-2">💡 应用项目：${result.projectTitle}</p>
+                        <p class="text-slate-300">${result.description}</p>
+                    </div>
+                    <div class="bg-slate-900 rounded-lg p-4">
+                        <p class="text-slate-400 font-semibold mb-2">📋 实施步骤</p>
+                        <ol class="text-sm text-slate-300 list-decimal list-inside space-y-1">
+                            ${result.steps.map(s => `<li>${s}</li>`).join('')}
+                        </ol>
+                    </div>
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                        <p class="text-green-400 font-semibold mb-2">✅ 完成标准</p>
+                        <ul class="text-sm text-slate-300 list-disc list-inside">
+                            ${result.successCriteria.map(c => `<li>${c}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+
+            // 保存确认内容
+            phaseConfirmedContents.phase6.confirmed = true;
+            phaseConfirmedContents.phase6.content = confirmedContent;
+
+            // 保存到step
+            step.phaseConfirmedContents = phaseConfirmedContents;
+            step.phases[5].result = result;
+            currentPhaseResult = result;
+
+            // 保存到数据库
+            await dbUpdate('projects', p);
+
+            // 刷新currentProject以确保数据同步
+            currentProject = await dbGet('projects', p.id);
+
+            // 显示确认后的界面
+            const contentEl = document.getElementById('phaseActionArea');
+            const mainContentEl = document.getElementById('phaseContent');
+            mainContentEl.innerHTML = getConfirmedPhaseContent(6, confirmedContent);
+        }
+
+        // ==================== Phase 7: 总结（生成笔记）====================
+        async function startPhase7() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">📋 AI 正在生成学习笔记...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                // 收集所有阶段的结果
+                const phasesSummary = step.phases.map((ph, idx) => {
+                    const name = ['启动', '框架', '学习', '费曼', '考试', '应用', '总结'][idx];
+                    return `${idx + 1}. ${name}: ${ph.completed ? '已完成' : ph.skipped ? '已跳过' : '未开始'}`;
+                }).join('\n');
+
+                const phase1Result = step.phases[0]?.result;
+                const phase2Result = step.phases[1]?.result;
+                const phase3Result = step.phases[2]?.result;
+                const phase4Result = step.phases[3]?.result;
+
+                // 收集Phase 3的讨论记录
+                let phase3DiscussionsSummary = '';
+                if (phase3Result && phase3Result.discussions && phase3Result.discussions.length > 0) {
+                    const discussedItems = phase3Result.discussions.filter(d => d.status === 'discussed');
+                    if (discussedItems.length > 0) {
+                        phase3DiscussionsSummary = '\n\n学习过程中的讨论：\n' + discussedItems.map(d => `**${d.stepTitle}**\n问题：${d.userQuestion}\n解答：${d.aiResponse.substring(0, 200)}...`).join('\n\n');
+                    }
+                }
+
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `基于学生完成的所有学习阶段，生成一份结构化学习笔记。
+
+学习主题：${step.title}
+学习日期：${new Date().toLocaleDateString('zh-CN')}
+
+各阶段完成情况：
+${phasesSummary}
+
+阶段2框架：${phase2Result?.currentPosition || '未完成'}
+阶段4费曼：${phase4Result?.level || '未完成'}
+${phase3DiscussionsSummary}
+
+请生成 Markdown 格式的笔记，包含以下部分：
+
+## 学习笔记：${step.title}
+
+**学习日期**：${new Date().toLocaleDateString('zh-CN')}
+
+### 1. 知识框架
+- 前置知识
+- 当前学习
+- 后续关联
+
+### 2. 学习内容概要
+${phase3Result?.steps ? phase3Result.steps.map(s => `- ${s}`).join('\n') : '- 核心概念1\n- 核心概念2\n- 核心概念3'}
+
+### 3. 核心收获
+- 列出3-5条关键知识点
+
+### 4. 重要讨论${phase3Result?.discussions && phase3Result.discussions.filter(d => d.status === 'discussed').length > 0 ? '（学习过程中产生的有价值的讨论）' : '（如有）'}
+- 记录重要的疑问和解答
+
+### 5. 关键概念
+- 术语 + 定义
+
+### 6. 知识连接
+- 与其他知识的联系
+
+### 7. 实际应用
+- 如何应用到实际中
+
+### 8. 下一步学习
+- 后续学习建议
+
+格式清晰，便于复习。直接输出 Markdown 内容，不要有代码块标记。`
+                }], { maxTokens: 4096 });
+
+                const result = { note: response.content, summary: '学习笔记已生成' };
+
+                // 存储结果
+                currentPhaseResult = result;
+
+                // 保存笔记到当前步骤
+                step.note = response.content;
+                await dbUpdate('projects', p);
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4 text-center">
+                            <p class="text-4xl mb-2">📝</p>
+                            <p class="text-green-400 font-semibold">笔记生成完成！</p>
+                        </div>
+
+                        <div class="bg-slate-900 rounded-lg p-4 max-h-[400px] overflow-y-auto window-content">
+                            ${renderMarkdown(response.content)}
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="selectPhase(6)" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="copyNote()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">📋 复制笔记</button>
+                            <button onclick="regeneratePhase7()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
+                            <button onclick="confirmPhase7Content()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function copyNote() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            if (step.note) {
+                await navigator.clipboard.writeText(step.note);
+                alert('笔记已复制到剪贴板');
+            }
+        }
+
+        async function regeneratePhase7() {
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">📋 AI 正在重新生成学习笔记...</p>';
+
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            try {
+                const phasesSummary = step.phases.map((ph, idx) => {
+                    const name = ['启动', '框架', '学习', '费曼', '考试', '应用', '总结'][idx];
+                    return `${idx + 1}. ${name}: ${ph.completed ? '已完成' : ph.skipped ? '已跳过' : '未开始'}`;
+                }).join('\n');
+
+                const phase1Result = step.phases[0]?.result;
+                const phase2Result = step.phases[1]?.result;
+                const phase3Result = step.phases[2]?.result;
+                const phase4Result = step.phases[3]?.result;
+
+                let phase3DiscussionsSummary = '';
+                if (phase3Result && phase3Result.discussions && phase3Result.discussions.length > 0) {
+                    const discussedItems = phase3Result.discussions.filter(d => d.status === 'discussed');
+                    if (discussedItems.length > 0) {
+                        phase3DiscussionsSummary = '\n\n学习过程中的讨论：\n' + discussedItems.map(d => `**${d.stepTitle}**\n问题：${d.userQuestion}\n解答：${d.aiResponse.substring(0, 200)}...`).join('\n\n');
+                    }
+                }
+
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `基于学生完成的所有学习阶段，生成一份结构化学习笔记。
+
+学习主题：${step.title}
+学习日期：${new Date().toLocaleDateString('zh-CN')}
+
+各阶段完成情况：
+${phasesSummary}
+
+阶段2框架：${phase2Result?.currentPosition || '未完成'}
+阶段4费曼：${phase4Result?.level || '未完成'}
+${phase3DiscussionsSummary}
+
+请生成 Markdown 格式的笔记，包含以下部分：
+
+## 学习笔记：${step.title}
+
+**学习日期**：${new Date().toLocaleDateString('zh-CN')}
+
+### 1. 知识框架
+- 前置知识
+- 当前学习
+- 后续关联
+
+### 2. 学习内容概要
+${phase3Result?.steps ? phase3Result.steps.map(s => `- ${s}`).join('\n') : '- 核心概念1\n- 核心概念2\n- 核心概念3'}
+
+### 3. 核心收获
+- 列出3-5条关键知识点
+
+### 4. 重要讨论${phase3Result?.discussions && phase3Result.discussions.filter(d => d.status === 'discussed').length > 0 ? '（学习过程中产生的有价值的讨论）' : '（如有）'}
+- 记录重要的疑问和解答
+
+### 5. 关键概念
+- 术语 + 定义
+
+### 6. 知识连接
+- 与其他知识的联系
+
+### 7. 实际应用
+- 如何应用到实际中
+
+### 8. 下一步学习
+- 后续学习建议
+
+格式清晰，便于复习。直接输出 Markdown 内容，不要有代码块标记。`
+                }], { maxTokens: 4096 });
+
+                const result = { note: response.content, summary: '学习笔记已生成' };
+                currentPhaseResult = result;
+
+                step.note = response.content;
+                await dbUpdate('projects', p);
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4 text-center">
+                            <p class="text-4xl mb-2">📝</p>
+                            <p class="text-green-400 font-semibold">笔记生成完成！</p>
+                        </div>
+
+                        <div class="bg-slate-900 rounded-lg p-4 max-h-[400px] overflow-y-auto window-content">
+                            ${renderMarkdown(response.content)}
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="selectPhase(6)" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="copyNote()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">📋 复制笔记</button>
+                            <button onclick="regeneratePhase7()" class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
+                            <button onclick="confirmPhase7Content()" class="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function confirmPhase7Content() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const result = currentPhaseResult;
+
+            // 生成确认后的HTML内容
+            const confirmedContent = `
+                <div class="space-y-4">
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                        <p class="text-green-400 font-semibold mb-2">📝 学习笔记已生成</p>
+                        <p class="text-slate-300 text-sm">您的学习笔记已生成并保存，可以随时查看和复制。</p>
+                    </div>
+                </div>
+            `;
+
+            // 保存确认内容
+            phaseConfirmedContents.phase7.confirmed = true;
+            phaseConfirmedContents.phase7.content = confirmedContent;
+
+            // 保存到step
+            step.phaseConfirmedContents = phaseConfirmedContents;
+            step.phases[6].result = result;
+            currentPhaseResult = result;
+
+            // 保存到数据库
+            await dbUpdate('projects', p);
+
+            // 刷新currentProject以确保数据同步
+            currentProject = await dbGet('projects', p.id);
+
+            // 显示确认后的界面
+            const contentEl = document.getElementById('phaseActionArea');
+            const mainContentEl = document.getElementById('phaseContent');
+            mainContentEl.innerHTML = getConfirmedPhaseContent(7, confirmedContent);
+        }
+
+        // ==================== 工具函数 ====================
+        function renderMarkdown(text) {
+            // 简单的 Markdown 渲染（不使用外部库）
+            if (!text) return '';
+
+            return text
+                // 标题
+                .replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold mt-4 mb-2 text-indigo-400">$1</h3>')
+                .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-4 mb-2 text-indigo-300">$1</h2>')
+                .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-4 mb-2 text-indigo-300">$1</h1>')
+                // 粗体和斜体
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                // 列表
+                .replace(/^\- (.*$)/gim, '<li class="ml-4">$1</li>')
+                .replace(/^\d+\. (.*$)/gim, '<li class="ml-4 list-decimal">$1</li>')
+                // 代码
+                .replace(/`([^`]+)`/g, '<code class="bg-slate-800 px-1 rounded text-green-400">$1</code>')
+                .replace(/```([^`]+)```/g, '<pre class="bg-slate-800 p-3 rounded my-2 overflow-x-auto"><code>$1</code></pre>')
+                // 换行
+                .replace(/\n\n/g, '<br><br>')
+                .replace(/\n/g, '<br>');
+        }
+
+        async function analyzeOriginalStructure() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            // 获取完整内容
+            let fullContent = '';
+            if (p.material.type === 'pdf') {
+                fullContent = p.material.fullText || p.material.preview || '';
+            } else {
+                fullContent = p.material.content || p.material.preview || '';
+            }
+
+            const contentEl = document.getElementById('phaseActionArea');
+            contentEl.innerHTML = '<p class="loading text-center py-8">📋 AI 正在分析原文结构...</p>';
+
+            try {
+                const response = await callModel(p.model, [{
+                    role: 'user',
+                    content: `请分析以下原文，生成忠实的层级大纲，帮助理解作者的思考逻辑和组织方式。
+
+学习主题：${step.title}
+
+原文内容：
+${fullContent}
+
+请按以下格式输出层级大纲（使用纯文本格式，不要JSON）：
+
+# 主标题
+
+## 一级分类 1
+### 二级分类 1.1
+- 要点1
+- 要点2
+
+### 二级分类 1.2
+- 要点1
+
+## 一级分类 2
+...
+
+要求：
+1. 严格忠实于原文，不要添加原文没有的内容
+2. 保持原文的逻辑顺序和组织结构
+3. 用简洁的语言概括每部分的核心内容
+4. 使用标准的层级大纲格式（# ## ### -）
+5. 只输出大纲，不要有其他解释或说明文字
+`
+                }]);
+
+                // 显示原文结构分析
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">📋 原文结构分析</p>
+                            <div class="text-slate-300 text-sm whitespace-pre-line leading-relaxed">${response.content.replace(/#/g, '<span class="text-indigo-400">#</span>').replace(/\n/g, '<br>')}</div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <button onclick="selectPhase(1)" class="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg font-bold">← 上一步</button>
+                            <button onclick="completePhaseSimple(2)" class="flex-1 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold">已理解，下一步 →</button>
+                        </div>
+                    </div>
+                `;
+
+            } catch (error) {
+                contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
+            }
+        }
+
+        async function completePhase(phaseNum, result) {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            // 更新阶段状态
+            if (typeof result === 'string') {
+                // 如果是字符串，包装成对象
+                step.phases[phaseNum - 1].result = { summary: result };
+            } else if (result === null || result === undefined) {
+                // 如果没有传结果，使用存储的结果
+                step.phases[phaseNum - 1].result = currentPhaseResult || { summary: '已完成' };
+            } else {
+                step.phases[phaseNum - 1].result = result;
+            }
+            step.phases[phaseNum - 1].completed = true;
+
+            // 清除临时存储
+            currentPhaseResult = null;
+
+            // 更新项目时间
+            p.updatedAt = new Date().toISOString();
+
+            await dbUpdate('projects', p);
+
+            // 刷新显示
+            renderLearningView();
+
+            // 自动进入下一阶段
+            if (phaseNum < 7) {
+                selectPhase(phaseNum + 1);
+            } else {
+                // 所有阶段完成，检查是否还有下一步骤
+                checkStepCompletion();
+            }
+        }
+
+        // 简化版本：只传递阶段号
+        async function completePhaseSimple(phaseNum) {
+            await completePhase(phaseNum, null);
+        }
+
+        async function checkStepCompletion() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            // 检查是否所有阶段都完成或跳过
+            const allDone = step.phases.every(ph => ph.completed || ph.skipped);
+
+            if (allDone) {
+                step.completed = true;
+                step.completedAt = new Date().toISOString();
+
+                if (p.currentStep < p.plan.steps.length) {
+                    // 有下一步骤
+                    const contentEl = document.getElementById('phaseContent');
+                    if (contentEl) {
+                        contentEl.innerHTML = `
+                            <div class="text-center py-8">
+                                <div class="text-6xl mb-4">🎉</div>
+                                <p class="text-xl font-semibold mb-2">恭喜！完成了本章所有学习步骤</p>
+                                <p class="text-slate-400 mb-4">准备好进入下一章了吗？</p>
+                                <button onclick="goToNextStep()" class="px-8 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-bold">
+                                    继续下一章 →
+                                </button>
+                            </div>
+                        `;
+                    }
+                    await dbUpdate('projects', p);
+                } else {
+                    // 所有步骤完成
+                    await dbUpdate('projects', p);
+                    alert('🎊 恭喜！你完成了所有学习内容！');
+                    backToMain();
+                }
+            }
+        }
+
+        async function goToNextStep() {
+            const p = currentProject;
+            p.currentStep++;
+            p.currentPhase = 1;
+            p.progress = (p.currentStep - 1) / p.plan.steps.length;
+            p.updatedAt = new Date().toISOString();
+            await dbUpdate('projects', p);
+            renderLearningView();
+        }
+
+        async function skipPhase(phaseNum) {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            step.phases[phaseNum - 1].skipped = true;
+            await dbUpdate('projects', p);
+
+            // 自动进入下一阶段
+            if (phaseNum < 7) {
+                selectPhase(phaseNum + 1);
+            }
+        }
+
+        async function resetPhase(phaseNum) {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            step.phases[phaseNum - 1].skipped = false;
+            step.phases[phaseNum - 1].completed = false;
+            step.phases[phaseNum - 1].result = null;
+            await dbUpdate('projects', p);
+            selectPhase(phaseNum);
+        }
+
+        function nextPhase() {
+            const p = currentProject;
+            if (p.currentPhase < 7) {
+                selectPhase(p.currentPhase + 1);
+            } else {
+                // 当前步骤完成，进入下一步
+                if (p.currentStep < p.plan.steps.length) {
+                    p.currentStep++;
+                    p.currentPhase = 1;
+                    p.progress = (p.currentStep - 1) / p.plan.steps.length;
+                    p.updatedAt = new Date().toISOString();
+                    dbUpdate('projects', p).then(() => {
+                        renderLearningView();
+                    });
+                } else {
+                    // 所有步骤完成
+                    alert('🎉 恭喜！你完成了所有学习步骤！');
+                    backToMain();
+                }
+            }
+        }
+
+        function backToMain() {
+            currentProject = null;
+            document.getElementById('learningView').classList.add('hidden');
+            document.getElementById('mainView').classList.remove('hidden');
+            renderProjectList();
+        }
+
+        function exportNote() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            if (step.note) {
+                // 下载 Markdown 文件
+                const blob = new Blob([step.note], { type: 'text/markdown' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${p.title} - ${step.title}.md`;
+                a.click();
+                URL.revokeObjectURL(url);
+            } else {
+                alert('请先完成第7阶段（总结）来生成笔记');
+            }
+        }
+
+        function updateChapterNote() {
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+            const noteEl = document.getElementById('chapterNote');
+
+            if (!noteEl) return;
+
+            // 检查已完成的阶段
+            const completedPhases = step.phases.filter(ph => ph.completed);
+            const totalPhases = step.phases.length;
+
+            if (completedPhases.length === 0) {
+                noteEl.innerHTML = '<p class="text-slate-600 text-center py-4">开始学习后将显示进度</p>';
+                return;
+            }
+
+            // 显示进度
+            noteEl.innerHTML = `
+                <div class="mb-3">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>进度</span>
+                        <span>${completedPhases.length}/${totalPhases}</span>
+                    </div>
+                    <div class="w-full bg-slate-700 rounded-full h-2">
+                        <div class="bg-indigo-600 h-2 rounded-full" style="width: ${(completedPhases.length / totalPhases) * 100}%"></div>
+                    </div>
+                </div>
+                <div class="space-y-2 text-xs">
+                    ${step.phases.map((ph, idx) => {
+                        if (ph.completed) return `<p class="text-green-400">✅ ${['启动', '框架', '学习', '费曼', '考试', '应用', '总结'][idx]}</p>`;
+                        if (ph.skipped) return `<p class="text-slate-600">⏭️ ${['启动', '框架', '学习', '费曼', '考试', '应用', '总结'][idx]}</p>`;
+                        return `<p class="text-slate-700">○ ${['启动', '框架', '学习', '费曼', '考试', '应用', '总结'][idx]}</p>`;
+                    }).join('')}
+                </div>
+                ${step.note ? `<p class="text-green-400 text-center mt-3">📝 笔记已生成</p>` : `<p class="text-slate-600 text-center mt-3">完成第7步生成笔记</p>`}
+            `;
+        }
+
+        // ==================== 初始化 ====================
+        async function init() {
+            try {
+                await initDB();
+                await renderProjectList();
+                await renderTodayLearning();
+            } catch (error) {
+                console.error('初始化失败:', error);
+                alert('应用初始化失败，请刷新页面重试');
+            }
+        }
+
+        async function renderTodayLearning() {
+            // TODO: 实现今日学习统计
+            const today = new Date().toDateString();
+            // 计算今天的学习记录
+            // 暂时显示默认内容
+        }
+
+        // 启动应用
+        init();
+    </script>
+</body>
+</html>
