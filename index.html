@@ -1751,18 +1751,47 @@ ${profile ? `学习者画像：${profile}` : ''}
                 // 有确认内容，显示确认后的界面（带重新生成按钮）
                 contentEl.innerHTML = getConfirmedPhaseContent(phaseNum, confirmedContent);
             } else if (phase.completed) {
-                // 已完成但没有确认内容，显示简单完成界面
-                contentEl.innerHTML = `
-                    <div class="text-center py-8">
-                        <div class="text-6xl mb-4">✅</div>
-                        <p class="text-xl font-semibold mb-2">已完成</p>
-                        <div class="text-slate-400 text-sm mb-4">${phase.result?.summary || '已完成此阶段'}</div>
-                        <div class="flex gap-2">
-                            ${phaseNum > 1 ? `<button onclick="selectPhase(${phaseNum - 1})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">← 上一步</button>` : ''}
-                            ${phaseNum < 7 ? `<button onclick="nextPhase()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg">下一步 →</button>` : ''}
+                // 已完成
+                if (phaseNum === 7) {
+                    // Phase 7 特殊处理：总是显示笔记内容
+                    const step = currentProject?.plan?.steps[currentProject?.currentStep - 1];
+                    const latestNote = step?.note || '';
+                    const noteContent = latestNote ? renderMarkdown(latestNote) : '<p class="text-slate-500">笔记内容未找到，请重新生成笔记</p>';
+
+                    contentEl.innerHTML = `
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span class="text-2xl">📋</span>
+                                    <h3 class="text-lg font-semibold">总结</h3>
+                                    <span class="text-green-400 text-sm">✓ 已完成</span>
+                                </div>
+                            </div>
+                            <div class="bg-slate-900 rounded-lg p-4 max-h-[600px] overflow-y-auto window-content">
+                                ${noteContent}
+                            </div>
+                            <div class="grid grid-cols-4 gap-2">
+                                <button onclick="selectPhase(6)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                                <button onclick="resetPhaseConfirmation(7)" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 重新生成</button>
+                                <button onclick="copyNote()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">📋 复制笔记</button>
+                                <button onclick="completePhaseSimple(7)" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 完成本章</button>
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                } else {
+                    // 其他阶段：显示简单完成界面
+                    contentEl.innerHTML = `
+                        <div class="text-center py-8">
+                            <div class="text-6xl mb-4">✅</div>
+                            <p class="text-xl font-semibold mb-2">已完成</p>
+                            <div class="text-slate-400 text-sm mb-4">${phase.result?.summary || '已完成此阶段'}</div>
+                            <div class="flex gap-2">
+                                ${phaseNum > 1 ? `<button onclick="selectPhase(${phaseNum - 1})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded text-sm">← 上一步</button>` : ''}
+                                ${phaseNum < 7 ? `<button onclick="nextPhase()" class="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg">下一步 →</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                }
             } else if (phase.skipped) {
                 // 已跳过
                 contentEl.innerHTML = `
@@ -1780,6 +1809,24 @@ ${profile ? `学习者画像：${profile}` : ''}
                 const phaseKey = `phase${phaseNum}`;
                 const hasConfirmed = phaseConfirmedContents[phaseKey]?.confirmed;
                 const confirmedContent = phaseConfirmedContents[phaseKey]?.content;
+
+                // Phase 2 特殊处理：如果已生成 result 数据，直接显示（不需要重新生成）
+                if (phaseNum === 2 && step.phases[1].result && !hasConfirmed) {
+                    currentPhaseResult = step.phases[1].result;
+                    // 先创建包含 phaseActionArea 的容器
+                    contentEl.innerHTML = `
+                        <div class="space-y-4">
+                            <div class="flex items-center gap-3">
+                                <span class="text-2xl">🗺️</span>
+                                <h3 class="text-lg font-semibold">${phase.name}</h3>
+                            </div>
+                            <div id="phaseActionArea"></div>
+                        </div>
+                    `;
+                    // 然后渲染已生成的内容
+                    await renderPhase2GeneratedContent(step.phases[1].result);
+                    return;
+                }
 
                 // 如果有已确认的内容，显示确认后的界面
                 if (hasConfirmed && confirmedContent) {
@@ -1813,6 +1860,24 @@ ${profile ? `学习者画像：${profile}` : ''}
             const phaseNames = ['启动', '框架', '学习', '费曼', '考试', '应用', '总结'];
             const phaseEmojis = ['🚀', '🗺️', '📖', '🗣️', '📝', '🛠️', '📋'];
 
+            // Phase 7 特殊处理：总是动态加载最新的笔记内容
+            let displayContent = content;
+            if (phaseNum === 7) {
+                const p = currentProject;
+                const step = p?.plan?.steps[p?.currentStep - 1];
+                const latestNote = step?.note || '';
+                if (latestNote) {
+                    displayContent = `
+                        <div class="space-y-4">
+                            <div class="bg-green-900/30 border border-green-700 rounded-lg p-3">
+                                <p class="text-green-400 text-sm text-center">✓ 学习笔记已保存</p>
+                            </div>
+                            ${renderMarkdown(latestNote)}
+                        </div>
+                    `;
+                }
+            }
+
             // 根据不同阶段显示不同的按钮
             let buttonsHTML = '';
             if (phaseNum === 1) {
@@ -1834,17 +1899,27 @@ ${profile ? `学习者画像：${profile}` : ''}
                         <button onclick="completePhaseSimple(2)" class="col-span-3 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
                     </div>
                 `;
+            } else if (phaseNum === 7) {
+                // Phase 7: 总结 - 特殊按钮（复制笔记、重新生成、完成本章）
+                buttonsHTML = `
+                    <div class="grid grid-cols-4 gap-2">
+                        <button onclick="selectPhase(6)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                        <button onclick="resetPhaseConfirmation(7)" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 重新生成</button>
+                        <button onclick="copyNote()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">📋 复制笔记</button>
+                        <button onclick="completePhaseSimple(7)" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 完成本章</button>
+                    </div>
+                `;
             } else {
                 // 其他阶段：标准按钮
                 buttonsHTML = `
                     <div class="grid grid-cols-3 gap-2">
+                        ${phaseNum > 1 ? `<button onclick="selectPhase(${phaseNum - 1})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>` : ''}
+                        <button onclick="resetPhaseConfirmation(${phaseNum})" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 修改内容</button>
                         ${phaseNum < 7 ? `
                         <button onclick="completePhaseSimple(${phaseNum})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm">下一步 →</button>
                         ` : `
                         <button onclick="completePhaseSimple(${phaseNum})" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg text-sm">完成本章 →</button>
                         `}
-                        <button onclick="resetPhaseConfirmation(${phaseNum})" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 修改内容</button>
-                        ${phaseNum > 1 ? `<button onclick="selectPhase(${phaseNum - 1})" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>` : ''}
                     </div>
                 `;
             }
@@ -1859,13 +1934,15 @@ ${profile ? `学习者画像：${profile}` : ''}
                         </div>
                     </div>
 
-                    <div class="bg-slate-900 rounded-lg p-4 max-h-[400px] overflow-y-auto window-content">
-                        ${content}
+                    <div class="bg-slate-900 rounded-lg p-4 ${phaseNum === 7 ? 'max-h-[600px]' : 'max-h-[400px]'} overflow-y-auto window-content">
+                        ${displayContent}
                     </div>
 
+                    ${phaseNum === 7 ? '' : `
                     <div class="bg-green-900/30 border border-green-700 rounded-lg p-3">
                         <p class="text-green-400 text-sm text-center">✓ 内容已确认，可以继续或修改</p>
                     </div>
+                    `}
 
                     ${buttonsHTML}
                 </div>
@@ -2809,6 +2886,12 @@ ${chapterContent.substring(0, 15000)}
                     </div>
                 `;
 
+                // 保存生成的 result 到数据库，确保离开页面后数据不丢失
+                step.phases[1].result = result;
+                phaseConfirmedContents.phase2.result = result;
+                step.phaseConfirmedContents = phaseConfirmedContents;
+                await dbUpdate('projects', p);
+
             } catch (error) {
                 contentEl.innerHTML = `<p class="text-red-400">错误: ${error.message}</p>`;
             }
@@ -2843,6 +2926,165 @@ ${chapterContent.substring(0, 15000)}
 
         async function regeneratePhase2() {
             await startPhase2();
+        }
+
+        // 渲染已生成的 Phase 2 内容（用于持久化后重新显示）
+        async function renderPhase2GeneratedContent(result) {
+            const contentEl = document.getElementById('phaseActionArea');
+            const p = currentProject;
+            const step = p.plan.steps[p.currentStep - 1];
+
+            // 设置当前 result
+            currentPhaseResult = result;
+
+            // 渲染框架的辅助函数（从 startPhase2 复制）
+            const renderFramework = (framework) => {
+                if (!framework) return '';
+                if (typeof framework === 'string') return framework;
+
+                if (Array.isArray(framework)) {
+                    let markdown = '';
+                    framework.forEach((module, idx) => {
+                        if (typeof module === 'string') {
+                            markdown += `## ${module}\n\n`;
+                        } else if (typeof module === 'object') {
+                            const moduleName = module.模块 || module.module || module.title || `模块 ${idx + 1}`;
+                            markdown += `## ${moduleName}\n\n`;
+                            if (module.核心概念) {
+                                const concepts = Array.isArray(module.核心概念) ? module.核心概念 : [module.核心概念];
+                                markdown += `**核心概念**：${concepts.join('、')}\n\n`;
+                            }
+                            const subItems = module.三大基因 || module.核心策略 || module.子项 || module.行动起点;
+                            if (subItems && Array.isArray(subItems)) {
+                                subItems.forEach(sub => {
+                                    if (typeof sub === 'object') {
+                                        const geneName = sub.基因 || sub.策略 || sub.名称 || '';
+                                        markdown += `### ${geneName}\n\n`;
+                                        if (sub.内容) markdown += `${sub.内容}\n\n`;
+                                        if (sub.文化产物 && sub.文化产物.length > 0) {
+                                            markdown += '**具体表现**：\n';
+                                            sub.文化产物.forEach(product => {
+                                                markdown += `- ${typeof product === 'string' ? product : (product.名称 || product.title || JSON.stringify(product))}\n`;
+                                            });
+                                            markdown += '\n';
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+                    return renderMarkdown(markdown);
+                }
+
+                if (framework.核心主题 && framework.子主题) {
+                    let markdown = `## 📌 核心主题\n\n${framework.核心主题}\n\n`;
+                    const subTopics = framework.子主题;
+                    if (Array.isArray(subTopics)) {
+                        subTopics.forEach((topic, idx) => {
+                            markdown += `### ${idx + 1}. ${topic.概念 || topic.title || topic}\n\n`;
+                            if (topic.内容) {
+                                if (Array.isArray(topic.内容)) {
+                                    markdown += topic.内容.map(c => `- ${c}`).join('\n');
+                                } else {
+                                    markdown += topic.内容;
+                                }
+                                markdown += '\n\n';
+                            }
+                        });
+                    }
+                    return renderMarkdown(markdown);
+                }
+
+                if (typeof framework === 'object' && framework !== null) {
+                    let markdown = '';
+                    Object.entries(framework).forEach(([key, value]) => {
+                        markdown += `### ${key}\n\n${Array.isArray(value) ? value.join('、') : value}\n\n`;
+                    });
+                    return renderMarkdown(markdown);
+                }
+
+                return String(framework);
+            };
+
+            // 显示生成的内容
+            contentEl.innerHTML = `
+                <div class="space-y-4">
+                    ${result.summaryOutline ? `
+                    <div class="bg-slate-800 border border-slate-600 rounded-lg p-4">
+                        <p class="text-slate-300 font-semibold mb-2">📜 材料脉络</p>
+                        <div class="text-slate-300 text-sm leading-relaxed space-y-1">
+                            ${result.summaryOutline.split(/\n(?=\d)/).filter(s => s.trim()).map(point => {
+                                const levelMatch = point.match(/^(\d+(?:\.\d+)*)\.\s*/);
+                                if (levelMatch) {
+                                    const level = levelMatch[1].split('.').length - 1;
+                                    const indent = level * 1.5;
+                                    const colors = ['text-indigo-400', 'text-blue-400', 'text-cyan-400'];
+                                    const color = colors[Math.min(level, 2)];
+                                    const content = point.replace(levelMatch[0], '');
+                                    return `<div class="flex gap-2" style="margin-left: ${indent}rem"><span class="${color} font-semibold shrink-0">${levelMatch[1]}.</span><span>${content}</span></div>`;
+                                }
+                                const numMatch = point.match(/^(\d+)\.\s*/);
+                                if (numMatch) {
+                                    return `<div class="flex gap-2"><span class="text-indigo-400 font-semibold shrink-0">${numMatch[1]}.</span><span>${point.replace(numMatch[0], '')}</span></div>`;
+                                }
+                                return `<div class="flex gap-2" style="margin-left: 0.5rem"><span class="text-slate-500 shrink-0">•</span><span>${point}</span></div>`;
+                            }).join('')}
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    ${result.coreArgument ? `
+                    <div class="bg-indigo-900/30 border border-indigo-700 rounded-lg p-4">
+                        <p class="text-indigo-400 font-semibold mb-2">💡 核心论点</p>
+                        <p class="text-slate-300">${result.coreArgument}</p>
+                    </div>
+                    ` : ''}
+
+                    ${result.reasoningProcess ? `
+                    <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                        <p class="text-amber-400 font-semibold mb-2">🔗 论证过程</p>
+                        <p class="text-slate-300 whitespace-pre-wrap">${result.reasoningProcess}</p>
+                    </div>
+                    ` : ''}
+
+                    <div class="bg-slate-900 rounded-lg p-4">
+                        <p class="text-green-400 font-semibold mb-2">🗺️ 文章结构与主干</p>
+                        <div class="text-slate-300 text-sm whitespace-pre-wrap">${renderFramework(result.articleStructure)}</div>
+                    </div>
+
+                    ${result.prerequisites && (Array.isArray(result.prerequisites) && result.prerequisites.length > 0) ? `
+                    <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+                        <p class="text-blue-400 font-semibold mb-2">⬅️ 前置知识</p>
+                        <ul class="text-sm text-slate-300 list-disc list-inside">
+                            ${result.prerequisites.map(item => `<li>${typeof item === 'object' ? (item.内容 || item.content || item.描述 || item.description || item.要点 || item.标题 || item.title || JSON.stringify(item)) : item}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+
+                    ${result.currentPosition ? `
+                    <div class="bg-slate-800 rounded-lg p-4">
+                        <p class="text-slate-400 font-semibold mb-2">📍 当前位置</p>
+                        <p class="text-slate-300">${result.currentPosition}</p>
+                    </div>
+                    ` : ''}
+
+                    ${result.nextSteps && (Array.isArray(result.nextSteps) && result.nextSteps.length > 0) ? `
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                        <p class="text-green-400 font-semibold mb-2">➡️ 后续学习方向</p>
+                        <ul class="text-sm text-slate-300 list-disc list-inside">
+                            ${result.nextSteps.map(item => `<li>${typeof item === 'object' ? (item.内容 || item.content || item.描述 || item.description || item.要点 || item.标题 || item.title || JSON.stringify(item)) : item}</li>`).join('')}
+                        </ul>
+                    </div>
+                    ` : ''}
+
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="selectPhase(1)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                        <button onclick="selectPhase(3)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                        <button onclick="regeneratePhase2()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
+                        <button onclick="confirmPhase2Content()" class="col-span-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
+                    </div>
+                </div>
+            `;
         }
 
         async function confirmPhase2Content() {
@@ -2931,6 +3173,7 @@ ${chapterContent.substring(0, 15000)}
             // 保存确认内容
             phaseConfirmedContents.phase2.confirmed = true;
             phaseConfirmedContents.phase2.content = confirmedContent;
+            phaseConfirmedContents.phase2.result = result;  // 保存result对象用于持久化
 
             // 保存到step
             step.phaseConfirmedContents = phaseConfirmedContents;
@@ -4107,8 +4350,8 @@ ${chapterContent.substring(0, 2000)}
                         </div>
 
                         <div class="grid grid-cols-2 gap-2">
-                            <button onclick="selectPhase(4)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
                             <button onclick="selectPhase(6)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="selectPhase(4)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
                             <button onclick="regeneratePhase5()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新生成</button>
                             <button onclick="confirmPhase5Content()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm">✓ 确认学习内容</button>
                         </div>
@@ -5264,19 +5507,28 @@ ${fullMaterialContent.length > 15000 ? `\n\n[注：材料过长，已截取前15
         async function confirmPhase7Content() {
             const p = currentProject;
             const step = p.plan.steps[p.currentStep - 1];
-            const result = currentPhaseResult;
 
-            // 生成确认后的HTML内容
+            // 确保笔记已保存到 step.note
+            const result = currentPhaseResult;
+            if (!step.note && result?.note) {
+                step.note = result.note;
+                await dbUpdate('projects', p);
+            }
+
+            // 重新从数据库获取最新的笔记内容
+            const latestNote = step.note || '';
+
+            // 生成确认后的HTML内容 - 显示完整笔记
             const confirmedContent = `
                 <div class="space-y-4">
-                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
-                        <p class="text-green-400 font-semibold mb-2">📝 学习笔记已生成</p>
-                        <p class="text-slate-300 text-sm">您的学习笔记已生成并保存，可以随时查看和复制。</p>
+                    <div class="bg-green-900/30 border border-green-700 rounded-lg p-3">
+                        <p class="text-green-400 text-sm text-center">✓ 学习笔记已保存</p>
                     </div>
+                    ${latestNote ? renderMarkdown(latestNote) : '<p class="text-slate-500">笔记内容未找到</p>'}
                 </div>
             `;
 
-            // 保存确认内容
+            // 保存确认内容（不包含笔记，笔记会动态加载）
             phaseConfirmedContents.phase7.confirmed = true;
             phaseConfirmedContents.phase7.content = confirmedContent;
 
