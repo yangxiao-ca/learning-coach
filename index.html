@@ -17,10 +17,22 @@
         .window-content code { background: #1e293b; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
         .window-content pre { background: #1e293b; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
         .window-content pre code { background: transparent; padding: 0; }
-        .phase-step { transition: all 0.3s ease; }
-        .phase-step.completed { background: #065f46; }
-        .phase-step.current { background: #1e40af; ring: 2px solid #60a5fa; }
-        .phase-step.skipped { opacity: 0.5; }
+        .phase-step {
+            transition: all 0.3s ease;
+            background: #475569;
+        }
+        .phase-step.completed { background: #22c55e; }
+        .phase-step.current {
+            background: #6366f1;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.8), 0 0 30px rgba(99, 102, 241, 0.4);
+            z-index: 10;
+        }
+        .phase-step.completed.current {
+            background: #22c55e;
+            box-shadow: 0 0 15px rgba(34, 197, 94, 0.8), 0 0 30px rgba(34, 197, 94, 0.4);
+            z-index: 10;
+        }
+        .phase-step.skipped { opacity: 0.4; background: #475569; }
         .loading { animation: pulse 1.5s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .modal { display: none; }
@@ -1120,10 +1132,11 @@ ${profile ? `学习者画像：${profile}` : ''}
                     `;
                 }
 
-                // 已生成规划的项目
-                const completedSteps = p.plan.steps.filter(s => s.phases && s.phases.every(ph => ph.completed || ph.skipped)).length;
-                const totalSteps = p.plan.steps.length;
-                const progress = Math.round((completedSteps / totalSteps) * 100);
+                // 已生成规划的项目 - 显示当前章节的7阶段进度
+                const currentStep = p.plan.steps[p.currentStep - 1];
+                const completedPhases = currentStep?.phases?.filter(ph => ph.completed).length || 0;
+                const totalPhases = 7;
+                const progress = Math.round((completedPhases / totalPhases) * 100);
 
                 return `
                     <div class="bg-slate-800 rounded-lg p-4 hover:bg-slate-750 cursor-pointer" onclick="openProject('${p.id}')">
@@ -1133,15 +1146,28 @@ ${profile ? `学习者画像：${profile}` : ''}
                         </div>
                         <div class="mb-2">
                             <div class="flex justify-between text-sm mb-1">
-                                <span>进度</span>
-                                <span>${completedSteps}/${totalSteps} 步</span>
+                                <span>当前章节进度</span>
+                                <span>${completedPhases}/7 阶段</span>
                             </div>
                             <div class="w-full bg-slate-700 rounded-full h-2">
                                 <div class="bg-indigo-600 h-2 rounded-full" style="width: ${progress}%"></div>
                             </div>
+                            <!-- 七阶段进度指示 -->
+                            <div class="flex gap-1 mt-2">
+                                ${[1, 2, 3, 4, 5, 6, 7].map(i => {
+                                    const phase = currentStep?.phases?.[i - 1];
+                                    const isCompleted = phase?.completed;
+                                    const isCurrent = phase?.id === p.currentPhase;
+                                    let classes = 'phase-indicator flex-1 h-1 rounded ';
+                                    if (isCompleted) classes += 'bg-green-500 ';
+                                    else if (isCurrent) classes += 'bg-indigo-500 current ';
+                                    else classes += 'bg-slate-600 ';
+                                    return `<div class="${classes}"></div>`;
+                                }).join('')}
+                            </div>
                         </div>
                         <div class="flex justify-between items-center text-sm">
-                            <span class="text-slate-400">当前: 第${p.currentStep}步 - ${p.plan.steps[p.currentStep - 1]?.title || '开始'}</span>
+                            <span class="text-slate-400">第${p.currentStep}/${p.plan.steps.length}章 - ${currentStep?.title || '开始'}</span>
                             <div class="flex gap-2">
                                 <button onclick="event.stopPropagation(); deleteProject('${p.id}')" class="px-2 py-1 bg-red-600 hover:bg-red-700 rounded text-xs">🗑️ 删除</button>
                                 <button onclick="event.stopPropagation(); continueProject('${p.id}')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 rounded text-xs">继续学习</button>
@@ -1289,6 +1315,16 @@ ${profile ? `学习者画像：${profile}` : ''}
             const currentStep = p.plan.steps[p.currentStep - 1];
             const totalSteps = p.plan.steps.length;
 
+            // 确保 currentPhase 有值
+            if (!p.currentPhase || p.currentPhase < 1) {
+                p.currentPhase = 1;
+            }
+
+            // 当前章节的7阶段进度
+            const completedPhases = currentStep?.phases?.filter(ph => ph.completed).length || 0;
+            const totalPhases = 7;
+            const phaseProgress = Math.round((completedPhases / totalPhases) * 100);
+
             document.getElementById('learningView').innerHTML = `
                 <div class="mb-4">
                     <button onclick="backToMain()" class="text-slate-400 hover:text-white text-sm mb-4">
@@ -1297,13 +1333,29 @@ ${profile ? `学习者画像：${profile}` : ''}
                     <div class="flex justify-between items-center">
                         <div>
                             <h1 class="text-2xl font-bold">${p.title}</h1>
-                            <p class="text-slate-400">第${p.currentStep}步 / 共${totalSteps}步</p>
                         </div>
                         <span class="text-sm text-slate-400">模型: ${MODELS[p.model]?.name || p.model}</span>
                     </div>
                     <div class="mt-2">
+                        <div class="flex justify-between text-xs text-slate-400 mb-1">
+                            <span>当前章节进度</span>
+                            <span>${completedPhases}/7 阶段</span>
+                        </div>
                         <div class="w-full bg-slate-700 rounded-full h-3">
-                            <div class="bg-indigo-600 h-3 rounded-full transition-all" style="width: ${(p.currentStep / totalSteps) * 100}%"></div>
+                            <div class="bg-indigo-600 h-3 rounded-full transition-all" style="width: ${phaseProgress}%"></div>
+                        </div>
+                        <!-- 七阶段进度指示 -->
+                        <div class="flex gap-1 mt-2">
+                            ${[1, 2, 3, 4, 5, 6, 7].map(i => {
+                                const phase = currentStep?.phases?.[i - 1];
+                                const isCompleted = phase?.completed;
+                                const isCurrent = phase?.id === p.currentPhase;
+                                let classes = 'phase-indicator flex-1 h-1.5 rounded-full ';
+                                if (isCompleted) classes += 'bg-green-500 ';
+                                else if (isCurrent) classes += 'bg-indigo-500 current ';
+                                else classes += 'bg-slate-600 ';
+                                return `<div class="${classes}"></div>`;
+                            }).join('')}
                         </div>
                     </div>
                 </div>
@@ -1322,7 +1374,7 @@ ${profile ? `学习者画像：${profile}` : ''}
                                     const isCurrent = phase?.id === p.currentPhase;
                                     const isSkipped = phase?.skipped;
 
-                                    let classes = 'phase-step flex-1 py-2 px-1 text-center text-xs rounded cursor-pointer ';
+                                    let classes = 'phase-step flex-1 py-3 px-2 text-center text-base rounded cursor-pointer ';
                                     if (isCompleted) classes += 'completed ';
                                     else if (isCurrent) classes += 'current ';
                                     else if (isSkipped) classes += 'skipped ';
@@ -1330,8 +1382,8 @@ ${profile ? `学习者画像：${profile}` : ''}
 
                                     return `
                                         <div class="${classes}" onclick="selectPhase(${i})">
-                                            <div class="font-bold">${i}</div>
-                                            <div class="text-[10px] opacity-70">${['启动', '框架', '学习', '费曼', '考试', '应用', '总结'][i - 1]}</div>
+                                            <div class="font-bold text-2xl">${i}</div>
+                                            <div class="font-bold text-base opacity-90">${['启动', '框架', '学习', '费曼', '考试', '应用', '总结'][i - 1]}</div>
                                         </div>
                                     `;
                                 }).join('')}
@@ -1368,10 +1420,91 @@ ${profile ? `学习者画像：${profile}` : ''}
             updateChapterNote();
         }
 
+        // 更新页面顶部的章节信息
+        function updateChapterHeader() {
+            const p = currentProject;
+            if (!p) return;
+
+            const currentStep = p.plan.steps[p.currentStep - 1];
+            const totalSteps = p.plan.steps.length;
+            const completedPhases = currentStep?.phases?.filter(ph => ph.completed).length || 0;
+            const phaseProgress = Math.round((completedPhases / 7) * 100);
+
+            // 更新标题区域
+            const headerEl = document.querySelector('#learningView > div > div > div > h1');
+            if (headerEl) headerEl.textContent = p.title;
+
+            // 更新进度条
+            const progressBar = document.querySelector('#learningView .w-full.bg-slate-700.rounded-full.h-3 > div');
+            if (progressBar) progressBar.style.width = `${phaseProgress}%`;
+
+            // 更新进度文字
+            const progressText = document.querySelector('#learningView .flex.justify-between.text-xs span:last-child');
+            if (progressText) progressText.textContent = `${completedPhases}/7 阶段`;
+
+            // 更新七阶段指示条
+            const phaseIndicators = document.querySelectorAll('#learningView .flex.gap-1.mt-2 > div');
+            if (phaseIndicators.length === 7) {
+                const currentStepData = p.plan.steps[p.currentStep - 1];
+                phaseIndicators.forEach((el, i) => {
+                    const phase = currentStepData?.phases?.[i];
+                    el.className = 'phase-indicator flex-1 h-1.5 rounded-full ';
+                    if (phase?.completed) {
+                        el.className += 'bg-green-500 ';
+                    } else if (phase?.id === p.currentPhase) {
+                        el.className += 'bg-indigo-500 current ';
+                    } else {
+                        el.className += 'bg-slate-600 ';
+                    }
+                });
+            }
+        }
+
+        // 更新阶段按钮样式
+        function updatePhaseStepButtons() {
+            const p = currentProject;
+            if (!p) return;
+
+            const currentStep = p.plan.steps[p.currentStep - 1];
+            const phaseButtons = document.querySelectorAll('.phase-step');
+
+            console.log('updatePhaseStepButtons:', {
+                currentPhase: p.currentPhase,
+                phases: currentStep?.phases?.map((ph, i) => ({
+                    num: i + 1,
+                    completed: ph?.completed,
+                    skipped: ph?.skipped
+                }))
+            });
+
+            if (phaseButtons.length === 7) {
+                phaseButtons.forEach((btn, i) => {
+                    const phase = currentStep?.phases?.[i];
+                    const phaseNum = i + 1;
+
+                    // 清除所有状态类
+                    btn.classList.remove('completed', 'current', 'skipped');
+
+                    // 根据状态添加对应类
+                    if (phaseNum === p.currentPhase) {
+                        // 当前浏览的阶段，总是添加 current 类（光晕）
+                        btn.classList.add('current');
+                        if (phase?.completed) {
+                            btn.classList.add('completed');
+                        }
+                    } else if (phase?.completed) {
+                        btn.classList.add('completed');
+                    } else if (phase?.skipped) {
+                        btn.classList.add('skipped');
+                    }
+                });
+            }
+        }
+
         async function selectPhase(phaseNum) {
             const p = currentProject;
-            const step = p.plan.steps[p.currentStep - 1];
-            const phase = step.phases[phaseNum - 1];
+            let step = p.plan.steps[p.currentStep - 1];
+            let phase = step.phases[phaseNum - 1];
 
             if (!phase) return;
 
@@ -1383,12 +1516,15 @@ ${profile ? `学习者画像：${profile}` : ''}
             const refreshedProject = await dbGet('projects', p.id);
             if (refreshedProject) {
                 currentProject = refreshedProject;
-                const refreshedStep = currentProject.plan.steps[currentProject.currentStep - 1];
+            }
 
-                // 加载已保存的确认内容
-                if (refreshedStep && refreshedStep.phaseConfirmedContents) {
-                    phaseConfirmedContents = refreshedStep.phaseConfirmedContents;
-                }
+            // 重新从刷新后的项目数据中获取 step 和 phase（重要！）
+            step = currentProject.plan.steps[currentProject.currentStep - 1];
+            phase = step.phases[phaseNum - 1];
+
+            // 加载已保存的确认内容
+            if (step && step.phaseConfirmedContents) {
+                phaseConfirmedContents = { ...phaseConfirmedContents, ...step.phaseConfirmedContents };
             }
 
             // 渲染阶段内容
@@ -1477,6 +1613,9 @@ ${profile ? `学习者画像：${profile}` : ''}
                         <button onclick="resetAndRegeneratePhase1()" class="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg text-sm">✏️ 重新学习</button>
                     </div>
                 `;
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
             } else if (phaseNum === 2 && phase.completed) {
                 // Phase 2 特殊处理：已完成，显示已保存的内容
                 const saved = phaseConfirmedContents.phase2 || {};
@@ -1577,6 +1716,9 @@ ${profile ? `学习者画像：${profile}` : ''}
                         </div>
                     </div>
                 `;
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
             } else if (phaseNum === 3 && phase.completed) {
                 // Phase 3 特殊处理：已完成，显示已保存的学习内容
                 const saved = phaseConfirmedContents.phase3 || {};
@@ -1639,6 +1781,9 @@ ${profile ? `学习者画像：${profile}` : ''}
                         </div>
                     </div>
                 `;
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
             } else if (phaseNum === 6 && phase.completed) {
                 // Phase 6 特殊处理：已完成，显示应用项目和落实行动
                 const saved = phaseConfirmedContents.phase6 || {};
@@ -1747,12 +1892,162 @@ ${profile ? `学习者画像：${profile}` : ''}
                         </div>
                     </div>
                 `;
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
+            } else if (phaseNum === 5 && step.phases[4]?.quizResults) {
+                // Phase 5 特殊处理：总是显示考试结果（不管是否有确认内容）
+                const quizResults = step.phases[4].quizResults;
+                const results = quizResults.results || [];
+                const scorePercent = quizResults.scorePercent || 0;
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-slate-900 rounded-lg p-4 text-center">
+                            <p class="text-4xl font-bold ${scorePercent >= 80 ? 'text-green-400' : scorePercent >= 60 ? 'text-amber-400' : 'text-red-400'}">
+                                ${quizResults.score || '-'}
+                            </p>
+                            <p class="text-slate-400">选择题得分</p>
+                        </div>
+
+                        <div class="space-y-3">
+                            ${results.map((r, idx) => `
+                                <div class="bg-slate-900 rounded-lg p-3">
+                                    <p class="text-sm font-semibold mb-2">${idx + 1}. ${r.question}</p>
+                                    ${r.isCorrect !== undefined ? `
+                                        <div class="flex items-center gap-2 ${r.isCorrect ? 'text-green-400' : 'text-red-400'}">
+                                            <span>${r.isCorrect ? '✅' : '❌'}</span>
+                                            <span class="text-sm">你的答案：${r.userAnswer || '未作答'}</span>
+                                            ${!r.isCorrect ? `<span class="text-sm">正确答案：${r.correctAnswer}</span>` : ''}
+                                        </div>
+                                        ${r.explanation ? `<p class="text-xs text-slate-400 mt-2">💡 ${r.explanation}</p>` : ''}
+                                    ` : `
+                                        <div class="text-sm text-slate-400 space-y-1">
+                                            <p>你的答案：${r.userAnswer && r.userAnswer !== '未作答' ? r.userAnswer : '<span class="text-amber-400">未作答</span>'}</p>
+                                            ${r.sampleAnswer ? `<p class="text-xs text-slate-500">参考答案：${r.sampleAnswer.substring(0, 150)}...</p>` : ''}
+                                        </div>
+                                    `}
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <div class="grid grid-cols-3 gap-2">
+                            <button onclick="selectPhase(4)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="selectPhase(6)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="regeneratePhase5()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新测试</button>
+                        </div>
+                    </div>
+                `;
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
+            } else if (phaseNum === 4 && step.phases[3]?.result) {
+                // Phase 4 特殊处理：总是显示费曼检验结果
+                const result = step.phases[3].result;
+                const levelColor = result.level === '完全理解' ? 'green' : result.level === '基本理解' ? 'amber' : 'red';
+                const levelIcon = result.level === '完全理解' ? '🎉' : result.level === '基本理解' ? '👍' : '💪';
+
+                contentEl.innerHTML = `
+                    <div class="space-y-4">
+                        <div class="bg-${levelColor}-900/30 border border-${levelColor}-700 rounded-lg p-4 text-center">
+                            <p class="text-4xl mb-2">${levelIcon}</p>
+                            <p class="text-${levelColor}-400 font-semibold text-lg">${result.level || '未评估'}</p>
+                            <p class="text-slate-400 text-sm">理解程度评估</p>
+                        </div>
+
+                        <div class="bg-slate-900 rounded-lg p-4">
+                            <p class="text-indigo-400 font-semibold mb-2">📝 你的费曼输出</p>
+                            <p class="text-slate-300 whitespace-pre-line">${result.userAnswer || '未完成'}</p>
+                        </div>
+
+                        ${result.strengths?.length ? `
+                        <div class="bg-green-900/30 border border-green-700 rounded-lg p-4">
+                            <p class="text-green-400 font-semibold mb-2">✅ 做得好的地方</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.strengths.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        ${result.gaps?.length ? `
+                        <div class="bg-amber-900/30 border border-amber-700 rounded-lg p-4">
+                            <p class="text-amber-400 font-semibold mb-2">💡 可以加强</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.gaps.map(g => `<li>${g}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        ${result.suggestions?.length ? `
+                        <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-4">
+                            <p class="text-blue-400 font-semibold mb-2">📝 建议</p>
+                            <ul class="text-sm text-slate-300 list-disc list-inside">
+                                ${result.suggestions.map(s => `<li>${s}</li>`).join('')}
+                            </ul>
+                        </div>
+                        ` : ''}
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="selectPhase(3)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                            <button onclick="selectPhase(5)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                            <button onclick="regeneratePhase4()" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-sm">🔄 重新检验</button>
+                        </div>
+                    </div>
+                `;
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
             } else if (hasConfirmed && confirmedContent) {
                 // 有确认内容，显示确认后的界面（带重新生成按钮）
                 contentEl.innerHTML = getConfirmedPhaseContent(phaseNum, confirmedContent);
             } else if (phase.completed) {
                 // 已完成
-                if (phaseNum === 7) {
+                if (phaseNum === 5) {
+                    // Phase 5 特殊处理：显示考试结果
+                    const quizResults = step.phases[4].quizResults;
+                    if (quizResults) {
+                        const results = quizResults.results || [];
+                        const scorePercent = quizResults.scorePercent || 0;
+
+                        contentEl.innerHTML = `
+                            <div class="space-y-4">
+                                <div class="bg-slate-900 rounded-lg p-4 text-center">
+                                    <p class="text-4xl font-bold ${scorePercent >= 80 ? 'text-green-400' : scorePercent >= 60 ? 'text-amber-400' : 'text-red-400'}">
+                                        ${quizResults.score || '-'}
+                                    </p>
+                                    <p class="text-slate-400">选择题得分</p>
+                                </div>
+
+                                <div class="space-y-3">
+                                    ${results.map((r, idx) => `
+                                        <div class="bg-slate-900 rounded-lg p-3">
+                                            <p class="text-sm font-semibold mb-2">${idx + 1}. ${r.question}</p>
+                                            ${r.isCorrect !== undefined ? `
+                                                <div class="flex items-center gap-2 ${r.isCorrect ? 'text-green-400' : 'text-red-400'}">
+                                                    <span>${r.isCorrect ? '✅' : '❌'}</span>
+                                                    <span class="text-sm">你的答案：${r.userAnswer || '未作答'}</span>
+                                                    ${!r.isCorrect ? `<span class="text-sm">正确答案：${r.correctAnswer}</span>` : ''}
+                                                </div>
+                                                ${r.explanation ? `<p class="text-xs text-slate-400 mt-2">💡 ${r.explanation}</p>` : ''}
+                                            ` : `
+                                                <div class="text-sm text-slate-400 space-y-1">
+                                                    <p>你的答案：${r.userAnswer && r.userAnswer !== '未作答' ? r.userAnswer : '<span class="text-amber-400">未作答</span>'}</p>
+                                                    ${r.sampleAnswer ? `<p class="text-xs text-slate-500">参考答案：${r.sampleAnswer.substring(0, 150)}...</p>` : ''}
+                                                </div>
+                                            `}
+                                        </div>
+                                    `).join('')}
+                                </div>
+
+                                <div class="grid grid-cols-3 gap-2">
+                                    <button onclick="selectPhase(4)" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">← 上一步</button>
+                                    <button onclick="selectPhase(6)" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">下一步 →</button>
+                                    <button onclick="regeneratePhase5()" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm">🔄 重新测试</button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                } else if (phaseNum === 7) {
                     // Phase 7 特殊处理：总是显示笔记内容
                     const step = currentProject?.plan?.steps[currentProject?.currentStep - 1];
                     const latestNote = step?.note || '';
@@ -1792,6 +2087,9 @@ ${profile ? `学习者画像：${profile}` : ''}
                         </div>
                     `;
                 }
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
             } else if (phase.skipped) {
                 // 已跳过
                 contentEl.innerHTML = `
@@ -1804,6 +2102,9 @@ ${profile ? `学习者画像：${profile}` : ''}
                         </div>
                     </div>
                 `;
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
             } else {
                 // 未完成，检查是否有已确认的内容
                 const phaseKey = `phase${phaseNum}`;
@@ -1825,12 +2126,16 @@ ${profile ? `学习者画像：${profile}` : ''}
                     `;
                     // 然后渲染已生成的内容
                     await renderPhase2GeneratedContent(step.phases[1].result);
+                    // 更新阶段按钮样式
+                    updatePhaseStepButtons();
                     return;
                 }
 
                 // 如果有已确认的内容，显示确认后的界面
                 if (hasConfirmed && confirmedContent) {
                     contentEl.innerHTML = getConfirmedPhaseContent(phaseNum, confirmedContent);
+                    // 更新阶段按钮样式
+                    updatePhaseStepButtons();
                 } else {
                     // 未完成，显示阶段内容
                     contentEl.innerHTML = `
@@ -1851,6 +2156,9 @@ ${profile ? `学习者画像：${profile}` : ''}
                         </div>
                     `;
                 }
+
+                // 更新阶段按钮样式
+                updatePhaseStepButtons();
             }
         }
 
@@ -4066,6 +4374,7 @@ ${discussions.filter(d => d.status === 'discussed').map(d => `- ${d.stepTitle}: 
             // 保存到step
             step.phaseConfirmedContents = phaseConfirmedContents;
             step.phases[3].result = result;
+            step.phases[3].completed = true;
             currentPhaseResult = result;
 
             // 保存到数据库
@@ -4078,6 +4387,8 @@ ${discussions.filter(d => d.status === 'discussed').map(d => `- ${d.stepTitle}: 
             const contentEl = document.getElementById('phaseActionArea');
             const mainContentEl = document.getElementById('phaseContent');
             mainContentEl.innerHTML = getConfirmedPhaseContent(4, confirmedContent);
+            // 更新阶段按钮样式
+            updatePhaseStepButtons();
         }
 
         // ==================== Phase 5: 考试（练习题）====================
@@ -4464,6 +4775,7 @@ ${chapterContent.substring(0, 2000)}
 
             // 保存到step
             step.phaseConfirmedContents = phaseConfirmedContents;
+            step.phases[4].completed = true;
 
             // 保存到数据库
             await dbUpdate('projects', p);
@@ -4475,6 +4787,8 @@ ${chapterContent.substring(0, 2000)}
             const contentEl = document.getElementById('phaseActionArea');
             const mainContentEl = document.getElementById('phaseContent');
             mainContentEl.innerHTML = getConfirmedPhaseContent(5, confirmedContent);
+            // 更新阶段按钮样式
+            updatePhaseStepButtons();
         }
 
         // ==================== Phase 6: 应用（实际行动）====================
@@ -5775,7 +6089,12 @@ ${fullContent}
             p.progress = (p.currentStep - 1) / p.plan.steps.length;
             p.updatedAt = new Date().toISOString();
             await dbUpdate('projects', p);
+
+            // 从数据库重新读取最新数据
+            currentProject = await dbGet('projects', p.id);
+
             renderLearningView();
+            updateChapterHeader();
         }
 
         async function skipPhase(phaseNum) {
@@ -5811,8 +6130,11 @@ ${fullContent}
                     p.currentPhase = 1;
                     p.progress = (p.currentStep - 1) / p.plan.steps.length;
                     p.updatedAt = new Date().toISOString();
-                    dbUpdate('projects', p).then(() => {
+                    dbUpdate('projects', p).then(async () => {
+                        // 从数据库重新读取最新数据
+                        currentProject = await dbGet('projects', p.id);
                         renderLearningView();
+                        updateChapterHeader();
                     });
                 } else {
                     // 所有步骤完成
